@@ -9,7 +9,7 @@ function ConvertFrom-UTC {
   } catch{ return $null }
 }
 function Get-Signature($path) { #function by diff xd
-  if (-not (Test-Path -Path $path -PathType Leaf)) {
+  if ([string]::IsNullOrWhiteSpace($path) -or !(Test-Path -Path $path -PathType Leaf)) {
       return "NotFound"
   }
   try {
@@ -70,8 +70,8 @@ if ($response[1].key -eq "y"){
     $output = switch -File $paths[1]{
       { [string]::IsNullOrWhiteSpace($_) } { continue }
       default{
-        $line = $_ -split "\|"
-        $path = [System.Environment]::ExpandEnvironmentVariables($line[2])
+        $line = ($_ -replace "`0", "") -split "\|" # replace bc is utf-16
+        $path = [Environment]::ExpandEnvironmentVariables($line[2])
 
         [PSCustomObject]@{
           Path          = $path
@@ -89,5 +89,3 @@ if ($response[1].key -eq "y"){
     $output | Out-GridView -Title "$($paths[1]) results. LogonTime: $logonT"
   } else { Write-Host -f Red "File $($paths[1]) doesn't exist." }
 }
-
-Pause
