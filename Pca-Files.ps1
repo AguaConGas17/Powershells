@@ -89,3 +89,5 @@ if ($response[1].key -eq "y"){
     $output | Out-GridView -Title "$($paths[1]) results. LogonTime: $logonT"
   } else { Write-Host -f Red "File $($paths[1]) doesn't exist." }
 }
+
+pause #lolaso
