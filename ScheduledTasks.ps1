@@ -130,5 +130,5 @@ foreach ($result in $sResults) {
     Write-Host ""
 }
 $results | Out-GridView -Title "Scheduled Tasks found"
-
+pause
 [Console]::CursorVisible = $true
