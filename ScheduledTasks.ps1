@@ -1,12 +1,59 @@
 Clear-Host
 
+[Console]::CursorVisible = $false
+
+$Admin = [Security.Principal.WindowsBuiltInRole]::Administrator
+$Current = [Security.Principal.WindowsIdentity]::GetCurrent()
+$Principal = [Security.Principal.WindowsPrincipal]::new($Current)
+
+if (-not $Principal.IsInRole($Admin)) {
+    Write-Host "ADMINISTRATOR PRIVILEGES REQUIRED" -ForegroundColor White -BackgroundColor Red
+    Start-Sleep -Seconds 5
+    exit
+}
+
+$keywords = @(
+    "cmd", "conhost", "java", "mshta", "-jar", "powershell", "msbuild",
+    "taskmgr", "type", "echo", "mmc", "start", "^", "regsvr32", "rundll32"
+)
+$falses = @(
+    "BfeOnServiceStartTypeChange", "\Program Files\AMD\CNext\CNext\cncmd.exe",
+    "\Program Files\AMD\CNext\CNext\RSServCmd.exe", "\Program Files\Microsoft OneDrive\26.129.0706.0003\OneDriveLauncher.exe",
+    "%SystemRoot%\System32\dsregcmd.exe", "%systemroot%\System32\UsoClient.exe", "\Program Files\AMD\CIM\Bin64\InstallManagerApp.exe",
+    "sc.exe start pushtoinstall login", "sc.exe start pushtoinstall registration", "sc.exe start w32time task_started",
+    "%windir%\system32\PcaSvc.dll,PcaPatchSdbTask", "config upnphost start= auto",
+    "%systemroot%\system32\cmd.exe /d /c %systemroot%\system32\hpatchmonTask.cmd", 
+    "%windir%\system32\rundll32.exe %windir%\system32\pcrpf.dll,NotifyFirmwareUpdateStaged",
+    "%windir%\system32\rundll32.exe %windir%\system32\Windows.StateRepositoryClient.dll,StateRepositoryDoMaintenanceTasks",
+    "%windir%\system32\rundll32.exe %windir%\system32\CapabilityAccessManager.dll,CapabilityAccessManagerDoStoreMaintenance",
+    "%windir%\system32\rundll32.exe %windir%\system32\AppxDeploymentClient.dll,AppxPreStageCleanupRunTask", 
+    "%systemroot%\System32\sc.exe start wuauserv"
+)
+
+$tasksPath = "$env:SystemDrive\Windows\System32\tasks"
+$tasks = Get-ChildItem -LiteralPath $tasksPath -Recurse -Force -File -ErrorAction SilentlyContinue
+$sResults = [Collections.Generic.List[object]]::new()
+$results = [Collections.Generic.List[object]]::new()
+$dAcc = [Collections.Generic.List[object]]::new()
+
+$unknown = "-- Unknown --"
+$counter = 1
+$total = $tasks.count
+$space = " " * 50
+$skipped = 0
+
+$schedule = Get-CimInstance Win32_Service -Filter "Name='Schedule'"
+$bootTime = (Get-CimInstance -ClassName Win32_OperatingSystem).LastBootUpTime
+$state = $schedule.State
+$startType = $schedule.StartMode   
+$startTime = if ($schedule) { (Get-Process -Id $schedule.ProcessId).StartTime } else { $StartTime = $unknown }
+
 Write-Host "Script by " -ForegroundColor White -NoNewline
 Write-Host "aguacongas17`n" -ForegroundColor Red
 
-$schedule = Get-CimInstance Win32_Service -Filter "Name='Schedule'" 
-$startTime = (Get-Process -Id $schedule.ProcessId).StartTime
-$state = $schedule.State
-$startType = $schedule.StartMode
+Write-Host "Do you want to see only the suspicious tasks? (y/n): " -NoNewline
+$onlyS = [Console]::ReadKey().KeyChar -like "y"
+Write-Host "`n"
 
 Write-Host "Schedule Integrity" -ForegroundColor DarkCyan
 Write-Host "------------------"
@@ -20,25 +67,12 @@ Write-Host $startType -ForegroundColor Yellow
 Write-Host "Start Time: " -NoNewline
 Write-Host $startTime -ForegroundColor Yellow
 
+Write-Host "Boot Time:  " -NoNewline
+Write-Host $bootTime -ForegroundColor Yellow
+
 Write-Host ""
 Write-Host "Tasks scan" -ForegroundColor DarkCyan
 Write-Host "----------"
-
-$keywords = @(
-    "cmd", "conhost", "java", "mshta",
-    "-jar", "powershell", "msbuild",
-    "taskmgr"
-)
-
-[Console]::CursorVisible = $false
-$tasksPath = "$env:SystemDrive\Windows\System32\tasks"
-$tasks = Get-ChildItem -LiteralPath $tasksPath -Recurse -Force -File -ErrorAction SilentlyContinue
-$sResults = [Collections.Generic.List[object]]::new()
-$results = [Collections.Generic.List[object]]::new()
-$unknown = "-- Unknown --"
-$counter = 1
-$total = $tasks.count
-$space = " " * 50
 
 foreach ($task in $tasks) {
     $color = if ($total -eq $counter) { [ConsoleColor]::Green } else { [ConsoleColor]::Yellow } 
@@ -65,11 +99,25 @@ foreach ($task in $tasks) {
         $action = $content.Task.Actions.Exec
         $cmmd = $action.Command
         $args = $action.Arguments
+        $fullAc = "$cmmd $args"
 
         foreach ($keyword in $keywords) {
-            if ($cmmd -like "*$keyword*" -or $args -like "*$keyword*") {
+            if ($fullAc -like "*$keyword*") {
                 $suspicious = $true
-                $strings.Add($keyword)
+                foreach ($f in $falses) {
+                    if ($fullAc -like "*$f*") {
+                        $suspicious = $false
+                        break
+                    }
+                }
+                if ($suspicious) {
+                    $strings.Add($keyword)
+                }
+                else {
+                    $skipped++
+                    $skip = "Skipped ($keyword)"
+                    $strings.Add($skip)
+                }
             }
         }
 
@@ -83,52 +131,48 @@ foreach ($task in $tasks) {
         }
     }
     catch {
-        Write-Host "Access denied: " -ForegroundColor Red -NoNewline
-        Write-Host $_.targetobject -ForegroundColor White
-
+        $dAcc.Add($_)
         continue
     }
 
-    $fullTask = [PSCustomObject]@{
+    $stringsF = $strings -join " | "
+
+    $fullT = [PSCustomObject]@{
         Author      = $author
-        Suspicious  = $suspicious
-        URI         = $uri
         LastRunTime = $lastRun
+        FullAction  = $fullAc
+        Suspicious  = $suspicious
+        Strings     = $stringsF
+        URI         = $uri
         Command     = $cmmd
         Arguments   = $args
         Triggers    = $triggers
-        Strings     = $strings
         Path        = $path
     }
 
     if ($suspicious) {
-        $sResults.Add($fullTask)
+        $sResults.Add($fullT)
     }
 
-    $results.Add($fullTask)
+    $results.Add($fullT)
     $counter++
 }
+
 Write-Host "`n"
+Write-Host "Skipped Suspicious Tasks: $skipped"
 
-$counter = 0
-foreach ($result in $sResults) {
-    if ($counter -eq 0) {
-        Write-Host "¡Suspicious tasks found!" -ForegroundColor Red
-        Write-Host "------------------------"
-        $counter++
-    }
-
-    Write-Host "Task:        " -NoNewline
-    Write-Host $result.Path -ForegroundColor Yellow
-
-    Write-Host "Strings:     " -NoNewline
-    Write-Host $result.Strings -ForegroundColor Yellow
-
-    Write-Host "LastRunTime: " -NoNewline
-    Write-Host $result.LastRunTime -ForegroundColor Yellow
-
-    Write-Host ""
+foreach ($acc in $dAcc) {
+    Write-Host "Access denied: " -ForegroundColor Red -NoNewline
+    Write-Host $acc.targetobject -ForegroundColor White
 }
-$results | Out-GridView -Title "Scheduled Tasks found"
-pause
+
+if ($onlyS) {
+    $sResults | Out-GridView -Title "Scheduled Tasks found (Only Suspicious)"
+} 
+else {
+    $results | Out-GridView -Title "Scheduled Tasks found"
+}
+
+Write-Host "Press any button to exit..."
+$null = [Console]::ReadKey()
 [Console]::CursorVisible = $true
