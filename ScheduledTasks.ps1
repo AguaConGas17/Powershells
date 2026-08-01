@@ -20,7 +20,7 @@ $keywords = @(
 $falses = @(
     "BfeOnServiceStartTypeChange", "\Program Files\AMD\CNext\CNext\cncmd.exe",
     "\Program Files\AMD\CNext\CNext\RSServCmd.exe", "\Program Files\Microsoft OneDrive*OneDriveLauncher.exe",
-    "\AppData\Local\Microsoft\OneDrive*OneDriveLauncher.exe", "--producttype"
+    "\AppData\Local\Microsoft\OneDrive*OneDriveLauncher.exe", "--producttype",
     "%SystemRoot%\System32\dsregcmd.exe", "%systemroot%\System32\UsoClient.exe", "\Program Files\AMD\CIM\Bin64\InstallManagerApp.exe",
     "sc.exe start pushtoinstall login", "sc.exe start pushtoinstall registration", "sc.exe start w32time task_started",
     "%windir%\system32\PcaSvc.dll,PcaWallpaperAppDetect", "%windir%\system32\PcaSvc.dll,PcaPatchSdbTask", "config upnphost start= auto",
@@ -29,10 +29,15 @@ $falses = @(
     "%windir%\system32\rundll32.exe %windir%\system32\Windows.StateRepositoryClient.dll,StateRepositoryDoMaintenanceTasks",
     "%windir%\system32\rundll32.exe %windir%\system32\CapabilityAccessManager.dll,CapabilityAccessManagerDoStoreMaintenance",
     "%windir%\system32\rundll32.exe %windir%\system32\AppxDeploymentClient.dll,AppxPreStageCleanupRunTask",
+    "%windir%\System32\Windows.SharedPC.AccountManager.dll,StartMaintenance",
     "%systemroot%\System32\sc.exe start wuauserv", "\ProgramData\Microsoft\Windows Defender\Platform*MpCmdRun.exe"
 )
+$fakeSig = @(
+    "manthe industries, llc", "slinkware", "amstion limited", 
+    "newfakeco", "faked signatures inc"
+)
 
-$tasksPath = "$env:SystemDrive\Windows\System32\tasks"
+$tasksPath = "$env:SystemDrive\Windows\System32\Tasks"
 $tasks = Get-ChildItem -LiteralPath $tasksPath -Recurse -Force -File -ErrorAction SilentlyContinue
 $sResults = [Collections.Generic.List[object]]::new()
 $results = [Collections.Generic.List[object]]::new()
@@ -52,11 +57,18 @@ $startTime = if ($schedule) { (Get-Process -Id $schedule.ProcessId).StartTime } 
 $upTime = $startTime - $bootTime
 $sUpTime = ("{0}h {1}m {2}s" -f $upTime.Hours, $upTime.Minutes, $upTime.Seconds)
 
-Write-Host "Script by " -ForegroundColor White -NoNewline
-Write-Host "aguacongas17`n" -ForegroundColor Red
+$journalCLI = "$env:TEMP\Journal_CLI.exe"
+$journalOUT = "$env:TEMP\journal.txt"
+$journalURI = "https://github.com/AguaConGas17/Powershells/releases/download/ScheduledTasks/Journal_CLI.exe"
+$time = $bootTime.ToString("yyyy-MM-dd HH:mm:ss")
 
-Write-Host "Do you want to see only the suspicious tasks? (y/n): " -NoNewline
+Write-Host "Script by " -ForegroundColor White -NoNewline
+Write-Host "aguacongas17" -ForegroundColor Red
+
+Write-Host "`nDo you want to see only the suspicious tasks? (y/n): " -NoNewline
 $onlyS = [Console]::ReadKey().KeyChar -like "y"
+Write-Host "`nDo you want to scan USNJournal for deleted tasks? (y/n): " -NoNewline
+$scanJ = [Console]::ReadKey().KeyChar -like "y"
 Write-Host "`n"
 
 Write-Host "Schedule Integrity" -ForegroundColor DarkCyan
@@ -130,15 +142,21 @@ foreach ($task in $tasks) {
                     $cmd = [Environment]::ExpandEnvironmentVariables($cmd)
                 }
 
-                $signature = (Get-AuthenticodeSignature -FilePath $cmd -ErrorAction SilentlyContinue).Status
+                $signature = Get-AuthenticodeSignature -FilePath $cmd -ErrorAction SilentlyContinue
                 if ($signature) {
-                    if ($signature -ne [Management.Automation.SignatureStatus]::Valid) {
+                    if ($signature.status -ne [Management.Automation.SignatureStatus]::Valid) {
                         $strings.Add("Unsigned File ($signature)")
                         $suspicious = $true
                         break
                     }
-                }
-                    
+                    foreach ($sig in $fakeSig) {
+                        if ($signature.SignerCertificate.Subject -like "*$sig*") {
+                            $strings.Add("Unsigned File (Fake Signature)")
+                            $suspicious = $true
+                            break
+                        }
+                    }
+                }       
             }
         }
 
@@ -178,12 +196,27 @@ foreach ($task in $tasks) {
     $counter++
 }
 
-Write-Host "`n"
-Write-Host "Skipped Suspicious Tasks: $skipped"
+Write-Host "`nSkipped Suspicious Tasks: $skipped"
 
 foreach ($acc in $dAcc) {
     Write-Host "Access denied: " -ForegroundColor Red -NoNewline
     Write-Host $acc.targetobject -ForegroundColor White
+}
+
+if ($scanJ) {
+    $null = Invoke-WebRequest -Uri $journalURI -UseBasicParsing -OutFile $journalCLI
+    $null = & $journalCLI $env:SystemDrive -A $time -r "File Delete" -p $tasksPath -R -f txt -o $journalOUT
+    $journal = Get-Content -Path $journalOUT -Force
+    
+    if ($journal) {
+        Write-Host "Deleted tasks saved in " -NoNewline
+        Write-Host $journalOUT -ForegroundColor Yellow
+
+        & notepad.exe $journalOUT
+    }
+    else {
+        Write-Host "No deleted tasks found"
+    }
 }
 
 if ($onlyS) {
