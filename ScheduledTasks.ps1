@@ -14,7 +14,8 @@ if (-not $Principal.IsInRole($Admin)) {
 
 $keywords = @(
     "cmd", "conhost", "java", "mshta", "-jar", "powershell", "msbuild",
-    "taskmgr", "type", "echo", "mmc", "start", "^", "regsvr32", "rundll32"
+    "taskmgr", "type", "echo", "mmc", "start", "^", "regsvr32", "rundll32",
+    "fsutil"
 )
 $falses = @(
     "BfeOnServiceStartTypeChange", "\Program Files\AMD\CNext\CNext\cncmd.exe",
@@ -46,7 +47,9 @@ $schedule = Get-CimInstance Win32_Service -Filter "Name='Schedule'"
 $bootTime = (Get-CimInstance -ClassName Win32_OperatingSystem).LastBootUpTime
 $state = $schedule.State
 $startType = $schedule.StartMode   
-$startTime = if ($schedule) { (Get-Process -Id $schedule.ProcessId).StartTime } else { $StartTime = $unknown }
+$startTime = if ($schedule) { (Get-Process -Id $schedule.ProcessId).StartTime } else { $unknown }
+$upTime = $startTime - $bootTime
+$sUpTime = ("{0}h {1}m {2}s" -f $upTime.Hours, $upTime.Minutes, $upTime.Seconds)
 
 Write-Host "Script by " -ForegroundColor White -NoNewline
 Write-Host "aguacongas17`n" -ForegroundColor Red
@@ -58,17 +61,15 @@ Write-Host "`n"
 Write-Host "Schedule Integrity" -ForegroundColor DarkCyan
 Write-Host "------------------"
 
-Write-Host "State:      " -NoNewline
+Write-Host "Service State: " -NoNewline
 Write-Host $state -ForegroundColor Yellow
 
-Write-Host "Start Type: " -NoNewline
+Write-Host "Start Type:    " -NoNewline
 Write-Host $startType -ForegroundColor Yellow
 
-Write-Host "Start Time: " -NoNewline
-Write-Host $startTime -ForegroundColor Yellow
-
-Write-Host "Boot Time:  " -NoNewline
-Write-Host $bootTime -ForegroundColor Yellow
+Write-Host "Start Time:    " -NoNewline
+Write-Host $startTime -ForegroundColor Yellow -NoNewline
+Write-Host " ($sUpTime after boot time)"
 
 Write-Host ""
 Write-Host "Tasks scan" -ForegroundColor DarkCyan
@@ -92,7 +93,7 @@ foreach ($task in $tasks) {
         $strings = [Collections.Generic.List[string]]::new()
         [xml]$content = Get-Content -LiteralPath $path -Raw -ErrorAction Stop
 
-        $triggers = $content.Task.Triggers.ChildNodes.Name
+        $triggers = $content.Task.Triggers.ChildNodes.Name -join ", "
         $author = $content.Task.RegistrationInfo.Author
         $author = if ($author) { $author } else { $unknown }
 
@@ -101,6 +102,7 @@ foreach ($task in $tasks) {
         $args = $action.Arguments
         $fullAc = "$cmmd $args"
 
+        
         foreach ($keyword in $keywords) {
             if ($fullAc -like "*$keyword*") {
                 $suspicious = $true
@@ -120,6 +122,24 @@ foreach ($task in $tasks) {
                 }
             }
         }
+        if ($cmmd) {
+            foreach ($cmd in $cmmd) {
+                $cmd = $cmd.trim('"')
+                if ($cmd.StartsWith("%")) {
+                    $cmd = [Environment]::ExpandEnvironmentVariables($cmd)
+                }
+
+                $signature = (Get-AuthenticodeSignature -FilePath $cmd -ErrorAction SilentlyContinue).Status
+                if ($signature) {
+                    if ($signature -ne [Management.Automation.SignatureStatus]::Valid) {
+                        $strings.Add("Unsigned File ($signature)")
+                        $suspicious = $true
+                        break
+                    }
+                }
+                    
+            }
+        }
 
         try {
             $uri = $content.Task.RegistrationInfo.URI
@@ -135,18 +155,17 @@ foreach ($task in $tasks) {
         continue
     }
 
-    $stringsF = $strings -join " | "
+    $stringsF = $strings -join " <-> "
 
     $fullT = [PSCustomObject]@{
         Author      = $author
         LastRunTime = $lastRun
-        FullAction  = $fullAc
+        Triggers    = $triggers
+        Command     = $cmmd
+        Arguments   = $args
         Suspicious  = $suspicious
         Strings     = $stringsF
         URI         = $uri
-        Command     = $cmmd
-        Arguments   = $args
-        Triggers    = $triggers
         Path        = $path
     }
 
