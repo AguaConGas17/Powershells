@@ -15,12 +15,12 @@ if (-not $Principal.IsInRole($Admin)) {
 $keywords = @(
     "cmd", "conhost", "java", "mshta", "-jar", "powershell", "msbuild",
     "taskmgr", "type", "echo", "mmc", "start", "^", "regsvr32", "rundll32",
-    "fsutil", "icacls"
+    "fsutil", "icacls", "python", "reg", "copy", "installutil", "curl"
 )
 $falses = @(
     "BfeOnServiceStartTypeChange", "\Program Files\AMD\CNext\CNext\cncmd.exe",
     "\Program Files\AMD\CNext\CNext\RSServCmd.exe", "\Program Files\Microsoft OneDrive*OneDriveLauncher.exe",
-    "\AppData\Local\Microsoft\OneDrive*OneDriveLauncher.exe", "--producttype",
+    "\AppData\Local\Microsoft\OneDrive*OneDriveLauncher.exe", "--producttype", "%windir%\System32\AppHostRegistrationVerifier.exe",
     "%SystemRoot%\System32\dsregcmd.exe", "%systemroot%\System32\UsoClient.exe", "\Program Files\AMD\CIM\Bin64\InstallManagerApp.exe",
     "sc.exe start pushtoinstall login", "sc.exe start pushtoinstall registration", "sc.exe start w32time task_started",
     "%windir%\system32\PcaSvc.dll,PcaWallpaperAppDetect", "%windir%\system32\PcaSvc.dll,PcaPatchSdbTask", "config upnphost start= auto",
