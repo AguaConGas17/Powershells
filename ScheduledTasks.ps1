@@ -12,6 +12,9 @@ if (-not $Principal.IsInRole($Admin)) {
     exit
 }
 
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+
 $keywords = @(
     "cmd", "conhost", "java", "mshta", "-jar", "powershell", "msbuild",
     "taskmgr", "type", "echo", "mmc", "start", "^", "regsvr32", "rundll32",
@@ -39,7 +42,6 @@ $fakeSig = @(
 
 $tasksPath = "$env:SystemDrive\Windows\System32\Tasks"
 $tasks = Get-ChildItem -LiteralPath $tasksPath -Recurse -Force -File -ErrorAction SilentlyContinue
-$sResults = [Collections.Generic.List[object]]::new()
 $results = [Collections.Generic.List[object]]::new()
 $dAcc = [Collections.Generic.List[object]]::new()
 
@@ -175,6 +177,8 @@ foreach ($task in $tasks) {
     }
 
     $stringsF = $strings -join " <-> "
+    $args = $args -join ", "
+    $cmmd = $cmmd -join ", "
 
     $fullT = [PSCustomObject]@{
         Author      = $author
@@ -186,10 +190,6 @@ foreach ($task in $tasks) {
         Strings     = $stringsF
         URI         = $uri
         Path        = $path
-    }
-
-    if ($suspicious) {
-        $sResults.Add($fullT)
     }
 
     $results.Add($fullT)
@@ -219,13 +219,116 @@ if ($scanJ) {
     }
 }
 
-if ($onlyS) {
-    $sResults | Out-GridView -Title "Scheduled Tasks found (Only Suspicious)"
-} 
-else {
-    $results | Out-GridView -Title "Scheduled Tasks found"
+$form = [Windows.Forms.Form]::new()
+$form.Text = "Scheduled Tasks found - AguaConGas17"
+$form.WindowState = "Maximized"
+$form.BackColor = [Drawing.Color]::WhiteSmoke
+
+$dataGV = [Windows.Forms.DataGridView]::new()
+$dataGV.Dock = "Fill"
+$dataGV.RowHeadersWidth = 25
+$dataGV.AutoSizeColumnsMode = "DisplayedCells"
+$dataGV.ScrollBars = "Both"
+$dataGV.AllowUserToAddRows = $false
+$dataGV.ReadOnly = $true
+
+$dataGV.BackgroundColor = [Drawing.Color]::LightSteelBlue
+$dataGV.GridColor = [Drawing.Color]::Gray
+
+$dataGV.ColumnHeadersDefaultCellStyle.BackColor = [Drawing.Color]::SteelBlue
+$dataGV.ColumnHeadersDefaultCellStyle.ForeColor = [Drawing.Color]::Black
+$dataGV.ColumnHeadersDefaultCellStyle.Font = [Drawing.Font]::new("Segoe UI", 10, [Drawing.FontStyle]::Bold)
+
+$dataGV.DefaultCellStyle.BackColor = [Drawing.Color]::Gainsboro
+$dataGV.DefaultCellStyle.ForeColor = [Drawing.Color]::Navy
+$dataGV.DefaultCellStyle.Font = [Drawing.Font]::new("Arial", 9)
+
+$form.Controls.Add($dataGV)
+
+$panel = [Windows.Forms.Panel]::new()
+$panel.Dock = "Top"
+$panel.Height = 30
+$panel.BackColor = [Drawing.Color]::LightSteelBlue
+$form.Controls.Add($panel)
+
+$searchLabel = [Windows.Forms.Label]::new()
+$searchLabel.Text = "Search in columns:"
+$searchLabel.Font = [Drawing.Font]::new("Segoe UI", 10, [Drawing.FontStyle]::Bold)
+$searchLabel.Location = [Drawing.Point]::new(10, 7)
+$searchLabel.AutoSize = $true
+$panel.Controls.Add($searchLabel)
+
+$searchBox = [Windows.Forms.TextBox]::new()
+$searchBox.Location = [Drawing.Point]::new(135, 7)
+$searchBox.BackColor = [Drawing.Color]::Gainsboro
+$searchBox.Width = 200
+$panel.Controls.Add($searchBox)
+
+$checkbox = [Windows.Forms.CheckBox]::new()
+$checkbox.Text = "Only Suspicious"
+$checkbox.Location = [Drawing.Point]::new(340, 10)
+$checkbox.Checked = $onlyS
+$checkbox.AutoSize = $true
+$panel.Controls.Add($checkbox)
+
+$dataTable = [Data.DataTable]::new()
+$null = $dataTable.Columns.Add("Author", [string])
+$null = $dataTable.Columns.Add("LastRunTime", [datetime])
+$null = $dataTable.Columns.Add("Triggers", [string])
+$null = $dataTable.Columns.Add("Command", [string])
+$null = $dataTable.Columns.Add("Arguments", [string])
+$null = $dataTable.Columns.Add("Suspicious", [bool])
+$null = $dataTable.Columns.Add("Strings", [string])
+$null = $dataTable.Columns.Add("URI", [string])
+$null = $dataTable.Columns.Add("Path", [string])
+
+foreach ($result in $results) {
+    $row = $dataTable.NewRow()
+
+    $row.Author = $result.Author
+    $row.LastRunTime = $result.LastRunTime
+    $row.Triggers = $result.Triggers
+    $row.Command = $result.Command
+    $row.Arguments = $result.Arguments
+    $row.Suspicious = $result.Suspicious
+    $row.Strings = $result.Strings
+    $row.URI = $result.URI
+    $row.Path = $result.Path
+    
+    $dataTable.Rows.Add($row)
 }
 
+$dataView = [Data.DataView]::new($dataTable)
+$dataGV.DataSource = $dataView
+if ($checkbox.Checked) { $dataView.RowFilter = "Suspicious = True" }
+
+function Update-Filter {
+    $filter = [Collections.Generic.List[string]]::new()
+    $text = $searchBox.Text
+
+    if ($checkbox.Checked) { $filter.Add("Suspicious = True") }
+
+    if ($text -ne "") {
+        $filter.Add("
+        (
+            Author LIKE '%$text%' OR
+            Triggers LIKE '%$text%' OR
+            Command LIKE '%$text%' OR
+            Arguments LIKE '%$text%' OR
+            Strings LIKE '%$text%' OR
+            URI LIKE '%$text%' OR
+            Path LIKE '%$text%'
+        )")
+    }
+
+    $dataView.RowFilter = $filter -join " AND "
+}
+
+$searchBox.Add_TextChanged({ Update-Filter })
+$checkbox.Add_CheckedChanged({ Update-Filter })
+
+$null = $form.ShowDialog()
+
 Write-Host "Press any button to exit..."
-$null = [Console]::ReadKey()
+$null = [Console]::ReadKey($true)
 [Console]::CursorVisible = $true
