@@ -18,7 +18,7 @@ Add-Type -AssemblyName System.Drawing
 $keywords = @(
     "cmd", "conhost", "java", "mshta", "-jar", "powershell", "msbuild",
     "taskmgr", "type", "echo", "mmc", "start", "^", "regsvr32", "rundll32",
-    "fsutil", "icacls", "python", "reg", "copy", "installutil", "curl"
+    "fsutil", "icacls", "python", "reg", "copy", "installutil", "curl", "cdb"
 )
 $falses = @(
     "BfeOnServiceStartTypeChange", "\Program Files\AMD\CNext\CNext\cncmd.exe",
@@ -32,7 +32,7 @@ $falses = @(
     "%windir%\system32\rundll32.exe %windir%\system32\Windows.StateRepositoryClient.dll,StateRepositoryDoMaintenanceTasks",
     "%windir%\system32\rundll32.exe %windir%\system32\CapabilityAccessManager.dll,CapabilityAccessManagerDoStoreMaintenance",
     "%windir%\system32\rundll32.exe %windir%\system32\AppxDeploymentClient.dll,AppxPreStageCleanupRunTask",
-    "%windir%\System32\Windows.SharedPC.AccountManager.dll,StartMaintenance",
+    "%windir%\System32\Windows.SharedPC.AccountManager.dll,StartMaintenance", "%windir%\system32\bcdboot.exe %windir% /sysrepair",
     "%systemroot%\System32\sc.exe start wuauserv", "\ProgramData\Microsoft\Windows Defender\Platform*MpCmdRun.exe"
 )
 $fakeSig = @(
@@ -203,21 +203,7 @@ foreach ($acc in $dAcc) {
     Write-Host $acc.targetobject -ForegroundColor White
 }
 
-if ($scanJ) {
-    $null = Invoke-WebRequest -Uri $journalURI -UseBasicParsing -OutFile $journalCLI
-    $null = & $journalCLI $env:SystemDrive -A $time -r "File Delete" -p $tasksPath -R -f txt -o $journalOUT
-    $journal = Get-Content -Path $journalOUT -Force
-    
-    if ($journal) {
-        Write-Host "Deleted tasks saved in " -NoNewline
-        Write-Host $journalOUT -ForegroundColor Yellow
-
-        & notepad.exe $journalOUT
-    }
-    else {
-        Write-Host "No deleted tasks found"
-    }
-}
+[Console]::CursorVisible = $true
 
 $form = [Windows.Forms.Form]::new()
 $form.Text = "Scheduled Tasks found - AguaConGas17"
@@ -231,18 +217,14 @@ $dataGV.AutoSizeColumnsMode = "DisplayedCells"
 $dataGV.ScrollBars = "Both"
 $dataGV.AllowUserToAddRows = $false
 $dataGV.ReadOnly = $true
-
 $dataGV.BackgroundColor = [Drawing.Color]::LightSteelBlue
 $dataGV.GridColor = [Drawing.Color]::Gray
-
 $dataGV.ColumnHeadersDefaultCellStyle.BackColor = [Drawing.Color]::SteelBlue
 $dataGV.ColumnHeadersDefaultCellStyle.ForeColor = [Drawing.Color]::Black
 $dataGV.ColumnHeadersDefaultCellStyle.Font = [Drawing.Font]::new("Segoe UI", 10, [Drawing.FontStyle]::Bold)
-
 $dataGV.DefaultCellStyle.BackColor = [Drawing.Color]::Gainsboro
 $dataGV.DefaultCellStyle.ForeColor = [Drawing.Color]::Navy
-$dataGV.DefaultCellStyle.Font = [Drawing.Font]::new("Arial", 9)
-
+$dataGV.DefaultCellStyle.Font = [Drawing.Font]::new("Arial", 9, [Drawing.FontStyle]::Regular)
 $form.Controls.Add($dataGV)
 
 $panel = [Windows.Forms.Panel]::new()
@@ -251,18 +233,18 @@ $panel.Height = 30
 $panel.BackColor = [Drawing.Color]::LightSteelBlue
 $form.Controls.Add($panel)
 
-$searchLabel = [Windows.Forms.Label]::new()
-$searchLabel.Text = "Search in columns:"
-$searchLabel.Font = [Drawing.Font]::new("Segoe UI", 10, [Drawing.FontStyle]::Bold)
-$searchLabel.Location = [Drawing.Point]::new(10, 7)
-$searchLabel.AutoSize = $true
-$panel.Controls.Add($searchLabel)
+$sLabel = [Windows.Forms.Label]::new()
+$sLabel.Text = "Search in columns:"
+$sLabel.Font = [Drawing.Font]::new("Segoe UI", 10, [Drawing.FontStyle]::Bold)
+$sLabel.Location = [Drawing.Point]::new(10, 7)
+$sLabel.AutoSize = $true
+$panel.Controls.Add($sLabel)
 
-$searchBox = [Windows.Forms.TextBox]::new()
-$searchBox.Location = [Drawing.Point]::new(135, 7)
-$searchBox.BackColor = [Drawing.Color]::Gainsboro
-$searchBox.Width = 200
-$panel.Controls.Add($searchBox)
+$sBox = [Windows.Forms.TextBox]::new()
+$sBox.Location = [Drawing.Point]::new(135, 7)
+$sBox.BackColor = [Drawing.Color]::Gainsboro
+$sBox.Width = 200
+$panel.Controls.Add($sBox)
 
 $checkbox = [Windows.Forms.CheckBox]::new()
 $checkbox.Text = "Only Suspicious"
@@ -271,19 +253,34 @@ $checkbox.Checked = $onlyS
 $checkbox.AutoSize = $true
 $panel.Controls.Add($checkbox)
 
-$dataTable = [Data.DataTable]::new()
-$null = $dataTable.Columns.Add("Author", [string])
-$null = $dataTable.Columns.Add("LastRunTime", [datetime])
-$null = $dataTable.Columns.Add("Triggers", [string])
-$null = $dataTable.Columns.Add("Command", [string])
-$null = $dataTable.Columns.Add("Arguments", [string])
-$null = $dataTable.Columns.Add("Suspicious", [bool])
-$null = $dataTable.Columns.Add("Strings", [string])
-$null = $dataTable.Columns.Add("URI", [string])
-$null = $dataTable.Columns.Add("Path", [string])
+if ($scanJ) {
+    $null = Invoke-WebRequest -Uri $journalURI -UseBasicParsing -OutFile $journalCLI
+    $null = & $journalCLI $env:SystemDrive -A $time -r "File Delete" -p $tasksPath -R -f txt -o $journalOUT
+
+    $button = [Windows.Forms.Button]::new()
+    $button.Text = "View deleted tasks"
+    $button.Width = 150
+    $button.Location = [Drawing.Point]::new(450, 5)
+    $button.Font = [Drawing.Font]::new("Segoe UI", 10, [Drawing.FontStyle]::Bold)
+    $button.BackColor = [Drawing.Color]::SteelBlue
+    $panel.Controls.Add($button)
+
+    $button.Add_Click({ & notepad.exe $journalOUT })
+}
+
+$dataT = [Data.DataTable]::new()
+$null = $dataT.Columns.Add("Author", [string])
+$null = $dataT.Columns.Add("LastRunTime", [datetime])
+$null = $dataT.Columns.Add("Triggers", [string])
+$null = $dataT.Columns.Add("Command", [string])
+$null = $dataT.Columns.Add("Arguments", [string])
+$null = $dataT.Columns.Add("Suspicious", [bool])
+$null = $dataT.Columns.Add("Strings", [string])
+$null = $dataT.Columns.Add("URI", [string])
+$null = $dataT.Columns.Add("Path", [string])
 
 foreach ($result in $results) {
-    $row = $dataTable.NewRow()
+    $row = $dataT.NewRow()
 
     $row.Author = $result.Author
     $row.LastRunTime = $result.LastRunTime
@@ -295,40 +292,23 @@ foreach ($result in $results) {
     $row.URI = $result.URI
     $row.Path = $result.Path
     
-    $dataTable.Rows.Add($row)
+    $dataT.Rows.Add($row)
 }
 
-$dataView = [Data.DataView]::new($dataTable)
+$dataView = [Data.DataView]::new($dataT)
 $dataGV.DataSource = $dataView
-if ($checkbox.Checked) { $dataView.RowFilter = "Suspicious = True" }
 
 function Update-Filter {
-    $filter = [Collections.Generic.List[string]]::new()
-    $text = $searchBox.Text
-
-    if ($checkbox.Checked) { $filter.Add("Suspicious = True") }
-
+    $text = $sBox.Text
+    $dataView.RowFilter = if ($checkbox.Checked) { "Suspicious = True" } else { "Suspicious = True OR Suspicious = False" }
+    
     if ($text -ne "") {
-        $filter.Add("
-        (
-            Author LIKE '%$text%' OR
-            Triggers LIKE '%$text%' OR
-            Command LIKE '%$text%' OR
-            Arguments LIKE '%$text%' OR
-            Strings LIKE '%$text%' OR
-            URI LIKE '%$text%' OR
-            Path LIKE '%$text%'
-        )")
+        $dataView.RowFilter += " AND (Author LIKE '%$text%' OR Triggers LIKE '%$text%' OR Command LIKE '%$text%' OR Arguments LIKE '%$text%' OR 
+        Strings LIKE '%$text%' OR URI LIKE '%$text%' OR Path LIKE '%$text%')"
     }
-
-    $dataView.RowFilter = $filter -join " AND "
 }
 
-$searchBox.Add_TextChanged({ Update-Filter })
+$sBox.Add_TextChanged({ Update-Filter })
 $checkbox.Add_CheckedChanged({ Update-Filter })
 
 $null = $form.ShowDialog()
-
-Write-Host "Press any button to exit..."
-$null = [Console]::ReadKey($true)
-[Console]::CursorVisible = $true
