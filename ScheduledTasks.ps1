@@ -2,11 +2,11 @@ Clear-Host
 
 [Console]::CursorVisible = $false
 
-$Admin = [Security.Principal.WindowsBuiltInRole]::Administrator
-$Current = [Security.Principal.WindowsIdentity]::GetCurrent()
-$Principal = [Security.Principal.WindowsPrincipal]::new($Current)
+$admin = [Security.Principal.WindowsBuiltInRole]::Administrator
+$current = [Security.Principal.WindowsIdentity]::GetCurrent()
+$principal = [Security.Principal.WindowsPrincipal]::new($Current)
 
-if (-not $Principal.IsInRole($Admin)) {
+if (-not $principal.IsInRole($admin)) {
     Write-Host "ADMINISTRATOR PRIVILEGES REQUIRED" -ForegroundColor White -BackgroundColor Red
     Start-Sleep -Seconds 5
     exit
@@ -35,7 +35,7 @@ $falses = @(
     "%windir%\System32\Windows.SharedPC.AccountManager.dll,StartMaintenance", "%windir%\system32\bcdboot.exe %windir% /sysrepair",
     "%systemroot%\System32\sc.exe start wuauserv", "\ProgramData\Microsoft\Windows Defender\Platform*MpCmdRun.exe"
 )
-$fakeSig = @(
+$cheatsSig = @(
     "manthe industries, llc", "slinkware", "amstion limited", 
     "newfakeco", "faked signatures inc"
 )
@@ -48,7 +48,6 @@ $dAcc = [Collections.Generic.List[object]]::new()
 $unknown = "-- Unknown --"
 $counter = 1
 $total = $tasks.count
-$space = " " * 50
 $skipped = 0
 
 $schedule = Get-CimInstance Win32_Service -Filter "Name='Schedule'"
@@ -91,8 +90,11 @@ Write-Host "Tasks scan" -ForegroundColor DarkCyan
 Write-Host "----------"
 
 foreach ($task in $tasks) {
+    $space = [Console]::WindowWidth - 21
+    $nameL = $task.Name.Length
     $color = if ($total -eq $counter) { [ConsoleColor]::Green } else { [ConsoleColor]::Yellow } 
-    
+    $name = if ($nameL -gt $space) { $task.Name.Substring(0, $space - 3) + "..." } else { $task.Name + (" " * ($space - $nameL)) }
+
     Write-Host "`rScanning [" -NoNewline
 
     Write-Host $counter -ForegroundColor $color -NoNewline
@@ -100,7 +102,7 @@ foreach ($task in $tasks) {
     Write-Host $total -ForegroundColor Green -NoNewline
 
     Write-Host "]: " -NoNewline
-    Write-Host $task.Name $space -ForegroundColor Yellow -NoNewline
+    Write-Host $name -ForegroundColor Yellow -NoNewline
 
     try {
         $path = $task.FullName
@@ -151,9 +153,9 @@ foreach ($task in $tasks) {
                         $suspicious = $true
                         break
                     }
-                    foreach ($sig in $fakeSig) {
+                    foreach ($sig in $cheatsSig) {
                         if ($signature.SignerCertificate.Subject -like "*$sig*") {
-                            $strings.Add("Unsigned File (Fake Signature)")
+                            $strings.Add("Cheat Signature")
                             $suspicious = $true
                             break
                         }
@@ -310,5 +312,6 @@ function Update-Filter {
 
 $sBox.Add_TextChanged({ Update-Filter })
 $checkbox.Add_CheckedChanged({ Update-Filter })
+Update-Filter
 
 $null = $form.ShowDialog()
