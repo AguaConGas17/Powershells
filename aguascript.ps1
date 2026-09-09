@@ -79,7 +79,6 @@ public class RegUtil
 "@
 
 function Get-Drives {
-  # ty diff x2 xd
   $max = 65536
   $stringBuilder = New-Object Text.StringBuilder($max)
   $driveMappings = Get-CimInstance Win32_Volume | Where-Object { $_.DriveLetter } | ForEach-Object {
@@ -94,37 +93,6 @@ function Get-Drives {
   }
   
   return $driveMappings
-}
-function Get-ServiceInfo([string[]]$services) {
-  $list = [Collections.Generic.List[object]]::new()
-  $allServices = Get-CimInstance Win32_Service
-
-  foreach ($service in $services) {
-    if ($service -eq "BAM") {
-      $info = Get-Service -Name $service -ErrorAction Continue
-      $name = $info.Name
-      $state = $info.Status
-      $sPid = $null
-      $startTime = $null
-    }
-    else {
-      $info = $allServices | Where-Object { $_.Name -eq $service }
-      $name = $info.Name
-      $state = $info.State
-      $sPid = $info.ProcessId
-
-      $process = Get-Process -Id $sPid -ErrorAction SilentlyContinue
-      $startTime = $process.StartTime
-    }
-    
-    $list.Add([pscustomobject]@{
-        Name  = $name
-        State = $state
-        Start = $startTime
-        PID   = $sPid
-      })
-  }
-  return $list
 }
 function Write-Int($indx, $simb, $message) {
   Write-Host $indx "[" -ForegroundColor Gray -NoNewline
@@ -143,7 +111,7 @@ $currentDate = Get-Date
 Write-Host "Script by " -NoNewline
 Write-Host "aguacongas17 :)`n" -ForegroundColor Red
 
-Write-Host "GENERAL INFORMATION`n" -ForegroundColor $titleColor
+Write-Host "GENERAL INFORMATION" -ForegroundColor $titleColor
 
 Write-Host $titleIndex "System boot time" -ForegroundColor Gray
 
@@ -155,20 +123,26 @@ Write-Host ("({0}d {1}h {2}m {3}s)" -f $upTime.Days, $upTime.Hours, $upTime.Minu
 
 Write-Host ""
 Write-Host $titleIndex "Minecraft start time" -ForegroundColor Gray
-$javaProcesses = Get-Process -Name "java*" -ErrorAction SilentlyContinue
-if ($javaProcesses) {
-  $javaProcesses | ForEach-Object {
-    $st = $_.StartTime
-    $upTime = $currentDate - $st
-    $pPid = $_.Id
-    $name = $_.Name
+$mcFound = $false
+$hsperfdataPath = Resolve-Path -path "$env:TEMP\hsperfdata*" -ErrorAction SilentlyContinue
+$javaPIDs = Get-ChildItem -Path $hsperfdataPath -Recurse -Force -File
+foreach ($java in $javaPIDs) {
+  $procPid = $java.Name
+  $process = Get-Process -Id $procPid
+  $modules = $process.Modules.FileVersionInfo.InternalName
 
-    Write-Host $titleIndex " $name ($pPid):" -ForegroundColor White -NoNewline
-    Write-Host " $st " -ForegroundColor Green -NoNewline
-    Write-Host ("({0}d {1}h {2}m {3}s)" -f $upTime.Days, $upTime.Hours, $upTime.Minutes, $upTime.Seconds) -ForegroundColor White
+  if ($modules -contains "jvm") {
+    $mcFound = $true
+    $startTime = $process.StartTime
+    $upTime = $currentDate - $startTime
+    $mName = $process.Name
   }
+  Write-Host $titleIndex " Minecraft process found: $mName ($procPid) " -ForegroundColor White -NoNewline
+  Write-Host ("{0}d {1}h {2}m {3}s" -f $upTime.Days, $upTime.Hours, $upTime.Minutes, $upTime.Seconds) -ForegroundColor Green
 }
-else { Write-Host $titleIndex " No Minecraft processes found..." -ForegroundColor White }
+if (-not $mcFound) {
+  Write-Host $titleIndex " No Minecraft processes found..." -ForegroundColor White 
+}
 
 Write-Host ""
 Write-Host $titleIndex "Connected drives" -ForegroundColor Gray
@@ -179,10 +153,39 @@ if ($drives) {
   }
 }
 
-Write-Host "`nSERVICE STATUS`n" -ForegroundColor $titleColor
+Write-Host "`nSERVICE STATUS" -ForegroundColor $titleColor
 
 $services = ("SysMain", "PcaSvc", "DPS", "EventLog", "Schedule", "Diagtrack", "Dusmsvc", "Appinfo", "DcomLaunch", "wsearch", "BAM")
-$serviceInfo = Get-ServiceInfo -Services $services
+$serviceInfo = [Collections.Generic.List[object]]::new()
+$allServices = Get-CimInstance Win32_Service
+
+foreach ($service in $services) {
+  $info = $allServices | Where-Object { $_.Name -eq $service }
+
+  if ($info) {
+    $sName = $info.Name
+    $state = $info.State
+    $procPid = $info.ProcessId
+
+    $process = Get-Process -Id $procPid -ErrorAction SilentlyContinue
+    $startTime = $process.StartTime
+  }
+  else {
+    $info = Get-Service -Name $service -ErrorAction SilentlyContinue
+    $sName = $info.Name
+    $state = $info.Status
+    $procPid = $null
+    $startTime = $null
+  }
+    
+  $serviceInfo.Add([pscustomobject]@{
+      Name  = $sName
+      State = $state
+      Start = $startTime
+      PID   = $procPid
+    }
+  )
+}
 
 foreach ($service in $serviceInfo) {
   $statusColor = if ($service.State -eq "Running") { "Green" } else { "Red" }
@@ -193,7 +196,7 @@ foreach ($service in $serviceInfo) {
   Write-Host $startTime -ForegroundColor Gray
 }
 
-Write-Host "`nSUSPICIOUS EVENT LOGS`n" -ForegroundColor $titleColor
+Write-Host "`nSUSPICIOUS EVENT LOGS" -ForegroundColor $titleColor
 $winevt = "SOFTWARE\Microsoft\Windows\CurrentVersion\WINEVT\Channels"
 $eventLog = "SYSTEM\CurrentControlSet\Services\EventLog"
 $events = @(
@@ -201,12 +204,6 @@ $events = @(
     Log       = "(Application 3079)"
     Registry  = "$winevt\Microsoft-Windows-Ntfs/Operational"
     LastEvent = Get-Winevent -LogName "Application" -FilterXPath "*[System[EventID=3079]]" -MaxEvents 1 -ErrorAction SilentlyContinue
-  }
-  @{Message   = "USN Journal Cleared"
-    Log       = "(Ntfs\Opera. 501)"
-    Registry  = "$winevt\Microsoft-Windows-Ntfs/Operational"
-    LastEvent = Get-Winevent -LogName "microsoft-windows-ntfs/operational" -FilterXPath "*[System[EventID=501]]" -ErrorAction SilentlyContinue | 
-    Where-Object { $_.message.Contains("fsutil") } | Select-Object -First 1
   }
   @{Message   = "Event Logs Cleared"
     Log       = "(System 104)"
@@ -235,7 +232,7 @@ $counter = 0
 foreach ($event in $events) {
   $lastEvent = if ($event.LastEvent) { $event.LastEvent.TimeCreated.ToString($formatDate) } else { "No records found" }
   $color = if ($lastEvent -eq "No records found") { "Yellow" } else { "Green" }
-  $lwt = [RegUtil]::GetLastWriteTime($event.Registry)
+  $lwt = [RegUtil]::GetLastWriteTime($event.Registry).ToString($formatDate)
 
   Write-Host $titleIndex ("{0,-20}: " -f $event.Message) -ForegroundColor White -NoNewline
   Write-Host ("{0,-20} " -f $lastEvent) -ForegroundColor $color -NoNewline
@@ -244,9 +241,9 @@ foreach ($event in $events) {
   Write-Host $titleIndex " |- Last modified: $lwt`n"
 }
 
-Write-Host "`nCOMMON FILES`n" -ForegroundColor $titleColor
+Write-Host "`nCOMMON FILES" -ForegroundColor $titleColor
 
-$recyclePath = [string]($env:SystemDrive + '\$Recycle.bin')
+$recyclePath = "$env:SystemDrive\`$Recycle.bin"
 Write-Host $titleIndex "Recycle Bin" -ForegroundColor Gray
 
 if (Test-Path $recyclePath) {
@@ -369,6 +366,33 @@ else {
 }
 
 Write-Host ""
+Write-Host $titleIndex 'USNJournal ($UsnJrnl:$J)'
+
+try {
+  $checkDJUri = "https://github.com/Orbdiff/CheckDeletedUSN/releases/download/v0.2.1/CheckDeletedUSN.exe"
+  $checkDJ = "$env:TEMP\CheckDeletedUSN.exe"
+  Invoke-WebRequest -Uri $checkDJUri -UseBasicParsing -OutFile $checkDJ -ErrorAction Stop
+  $journalInfo = "" | & $checkDJ
+
+  $jrnlPath = $journalInfo[1].Substring($journalInfo[1].IndexOf(":\") - 1)
+  [datetime]$jrnlCreation = $journalInfo[2].Substring(31)
+  $jrnlState = $journalInfo[5].Substring(4) 
+  $sColor = if ($jrnlState -eq '$UsnJrnl:$J Intact!') { "Green" } else { "Red" }
+
+  Write-Host $inforIndex "File Path:`t" -ForegroundColor White -NoNewline
+  Write-Host $jrnlPath
+
+  Write-Host $inforIndex "Created:`t" -ForegroundColor White -NoNewline
+  Write-Host $jrnlCreation
+
+  Write-Host $inforIndex "State:`t" -ForegroundColor White -NoNewline
+  Write-Host $jrnlState -ForegroundColor $sColor
+}
+catch {
+  Write-Host $inforIndex "Error downloading: $checkDJUri" -ForegroundColor Red
+}
+
+Write-Host ""
 Write-Host $titleIndex "TEMP" -ForegroundColor Gray
 $tmp = $env:TEMP
 
@@ -419,8 +443,12 @@ if (Test-Path $tmp) {
 
     if ($executions) {
       Write-Host "`tExecution(s) found:" -ForegroundColor White
+      $counter = 0
       $javaExecutions.GetEnumerator() | ForEach-Object {
-        Write-Host ("`t - {0}: " -f $_.Value) -ForegroundColor Gray -NoNewline
+        $counter++
+        $eTime = $_.Value.ToString($formatDate)
+        
+        Write-Host "`t$counter. $($eTime): " -ForegroundColor Gray -NoNewline
         Write-Host $_.Key -ForegroundColor $color
       }
     }
@@ -439,8 +467,11 @@ if (Test-Path $tmp) {
   if ($jnativeHook) {
     Write-Host "JnativeHook files found" -ForegroundColor Gray
     
+    $counter = 0
     $jnativeHook | ForEach-Object {
-      Write-Host ("`t{0} {1}: " -f "-", $_.LastWriteTime) -ForegroundColor Gray -NoNewline
+      $counter++
+      $lwt = $_.LastWriteTime.ToString($formatDate)
+      Write-Host $inforIndex "`t$counter. $($lwt): " -ForegroundColor Gray -NoNewline
       Write-Host $_.FullName -ForegroundColor Yellow
     }
   }
@@ -452,14 +483,14 @@ else {
   Write-Host $inforIndex "$tmp not found??" -ForegroundColor Red
 }
 
-Write-Host "`nPREFETCH INTEGRITY`n" -ForegroundColor $titleColor
+Write-Host "`nPREFETCH INTEGRITY" -ForegroundColor $titleColor
 
 $prefetchPath = "$env:SystemRoot\Prefetch"
 
-Write-Host $titleIndex "Prefetch status: " -ForegroundColor Gray -NoNewline
+Write-Host $titleIndex "Prefetch status: " -ForegroundColor White -NoNewline
 Write-Host "Scanning..." -ForegroundColor Gray -NoNewline
 
-Write-Host ("`r{0,1}" -f "") "Prefetch status: " -ForegroundColor Gray -NoNewline
+Write-Host ("`r{0,1}" -f "") "Prefetch status: " -ForegroundColor White -NoNewline
 
 if (Test-Path $prefetchPath) {
   $files = Get-ChildItem -LiteralPath $prefetchPath -Filter *.pf -Force
@@ -574,7 +605,7 @@ else {
   Write-Host "Prefetch folder not found in '$prefetchPath'" -ForegroundColor Red 
 }
 
-Write-Host "`nREGISTRY`n" -ForegroundColor $titleColor
+Write-Host "`nREGISTRY" -ForegroundColor $titleColor
 
 $registryItems = @(
   @{Name = "Command Prompt"
@@ -620,9 +651,8 @@ catch [Security.SecurityException] {
   Write-Host "Denied access to: $($_.TargetObject)! " -ForegroundColor Yellow -NoNewline
 }
 catch {
-  Write-Host ("{0}: {1}! " -f $_.Exception, $_.TargetObject) -ForegroundColor Yellow -NoNewline
+  Write-Host "$($_.Exception): $($_.TargetObject)!" -ForegroundColor Yellow -NoNewline
 }
-
 finally {
   $currentVersion = Get-ChildItem -LiteralPath "HKLM:\Software\Microsoft\Windows NT\CurrentVersion" -ErrorAction SilentlyContinue
 }
