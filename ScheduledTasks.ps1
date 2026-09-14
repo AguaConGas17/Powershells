@@ -47,6 +47,7 @@ $results = [Collections.Generic.List[object]]::new()
 $dAcc = [Collections.Generic.List[object]]::new()
 
 $unknown = "-- Unknown --"
+$username = $env:USERNAME
 $counter = 1
 $total = $tasks.count
 $skipped = 0
@@ -99,7 +100,6 @@ Write-Host "Tasks scan" -ForegroundColor DarkCyan
 Write-Host "----------"
 
 foreach ($task in $tasks) {
-    #if ($counter -eq 30) { break }
     $space = [Console]::WindowWidth - 21
     $nameL = $task.Name.Length
     $color = if ($total -eq $counter) { [ConsoleColor]::Green } else { [ConsoleColor]::Yellow } 
@@ -227,9 +227,17 @@ foreach ($acc in $dAcc) {
 [Console]::CursorVisible = $true
 
 $form = [Windows.Forms.Form]::new()
-$form.Text = "Scheduled Tasks found - AguaConGas17"
+$form.Text = "Scheduled Tasks found"
 $form.WindowState = "Maximized"
 $form.BackColor = [Drawing.Color]::WhiteSmoke
+try {
+    Invoke-WebRequest -Uri "https://raw.githubusercontent.com/AguaConGas17/randomassets/main/ssalogo.png" -UseBasicParsing -OutFile "$env:TEMP\ssalogo.png" -ErrorAction Stop
+    $bitmap = [Drawing.Bitmap]::new("$env:TEMP\ssalogo.png")
+    $form.Icon = [Drawing.Icon]::FromHandle($bitmap.GetHicon())
+}
+catch {
+    $form.ShowIcon = $false
+}
 
 $dataGV = [Windows.Forms.DataGridView]::new()
 $dataGV.Dock = "Fill"
@@ -342,11 +350,11 @@ function Update-Filter {
     }
 
     if ($mtCB.Checked) {
-        $filter.Add("Author LIKE 'COMPUTER\%'")
+        $filter.Add("Author LIKE '%$username%'")
     }
     
     if ($text -ne "") {
-        $filter.Add("(Author LIKE '%$text%' OR Triggers LIKE '%$text%' OR Command LIKE '%$text%' OR Arguments LIKE '%$text%' OR 
+        $filter.Add("(Triggers LIKE '%$text%' OR Command LIKE '%$text%' OR Arguments LIKE '%$text%' OR 
         Strings LIKE '%$text%' OR URI LIKE '%$text%' OR Path LIKE '%$text%')")
     }
 
