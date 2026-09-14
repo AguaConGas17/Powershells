@@ -1,3 +1,4 @@
+$ErrorActionPreference = "SilentlyContinue"
 Clear-Host
 
 function IsAdmin {
@@ -95,9 +96,9 @@ function Get-Drives {
   return $driveMappings
 }
 function Write-Int($indx, $simb, $message) {
-  Write-Host $indx "[" -ForegroundColor Gray -NoNewline
+  Write-Host $indx "[" -ForegroundColor $subtColor -NoNewline
   Write-Host $simb -ForegroundColor Yellow -NoNewline
-  Write-Host "] " -ForegroundColor Gray -NoNewline
+  Write-Host "] " -ForegroundColor $subtColor -NoNewline
   
   Write-Host $message -ForegroundColor Yellow
 }
@@ -107,24 +108,26 @@ $inforIndex = ("{0,2}" -f "")
 $titleColor = "DarkMagenta"
 $formatDate = "dd-MM-yyyy HH:mm:ss"
 $currentDate = Get-Date
+$textColor = "white"
+$subtColor = "gray"
 
 Write-Host "Script by " -NoNewline
 Write-Host "aguacongas17 :)`n" -ForegroundColor Red
 
 Write-Host "GENERAL INFORMATION" -ForegroundColor $titleColor
 
-Write-Host $titleIndex "System boot time" -ForegroundColor Gray
+Write-Host $titleIndex "System boot time" -ForegroundColor $subtColor
 
 $bootTime = (Get-CimInstance -ClassName Win32_OperatingSystem).LastBootUpTime
 $upTime = $currentDate - $bootTime
-Write-Host $titleIndex " Last Boot:" -ForegroundColor White -NoNewline
+Write-Host $titleIndex " Last Boot:" -ForegroundColor $textColor -NoNewline
 Write-Host " $bootTime " -ForegroundColor Green -NoNewline
-Write-Host ("({0}d {1}h {2}m {3}s)" -f $upTime.Days, $upTime.Hours, $upTime.Minutes, $upTime.Seconds) -ForegroundColor White
+Write-Host ("({0}d {1}h {2}m {3}s)" -f $upTime.Days, $upTime.Hours, $upTime.Minutes, $upTime.Seconds) -ForegroundColor $textColor
 
 Write-Host ""
-Write-Host $titleIndex "Minecraft start time" -ForegroundColor Gray
+Write-Host $titleIndex "Minecraft start time" -ForegroundColor $subtColor
 $mcFound = $false
-$hsperfdataPath = Resolve-Path -path "$env:TEMP\hsperfdata*" -ErrorAction SilentlyContinue
+$hsperfdataPath = Resolve-Path -path "$env:TEMP\hsperfdata*"
 $javaPIDs = Get-ChildItem -Path $hsperfdataPath -Recurse -Force -File
 foreach ($java in $javaPIDs) {
   $procPid = $java.Name
@@ -137,19 +140,19 @@ foreach ($java in $javaPIDs) {
     $upTime = $currentDate - $startTime
     $mName = $process.Name
   }
-  Write-Host $titleIndex " Minecraft process found: $mName ($procPid) " -ForegroundColor White -NoNewline
+  Write-Host $titleIndex " Minecraft process found: $mName ($procPid) " -ForegroundColor $textColor -NoNewline
   Write-Host ("{0}d {1}h {2}m {3}s" -f $upTime.Days, $upTime.Hours, $upTime.Minutes, $upTime.Seconds) -ForegroundColor Green
 }
 if (-not $mcFound) {
-  Write-Host $titleIndex " No Minecraft processes found..." -ForegroundColor White 
+  Write-Host $titleIndex " No Minecraft processes found..." -ForegroundColor $textColor 
 }
 
 Write-Host ""
-Write-Host $titleIndex "Connected drives" -ForegroundColor Gray
+Write-Host $titleIndex "Connected drives" -ForegroundColor $subtColor
 $drives = Get-Drives
 if ($drives) {
   foreach ($drive in $drives) {
-    Write-Host $titleIndex (" {0,-2} {1,-5} {2}" -f $drive.DriveLetter, $drive.FileSystem, $drive.DevicePath) -ForegroundColor White
+    Write-Host $titleIndex (" {0,-2} {1,-5} {2}" -f $drive.DriveLetter, $drive.FileSystem, $drive.DevicePath) -ForegroundColor $textColor
   }
 }
 
@@ -167,11 +170,11 @@ foreach ($service in $services) {
     $state = $info.State
     $procPid = $info.ProcessId
 
-    $process = Get-Process -Id $procPid -ErrorAction SilentlyContinue
+    $process = Get-Process -Id $procPid
     $startTime = $process.StartTime
   }
   else {
-    $info = Get-Service -Name $service -ErrorAction SilentlyContinue
+    $info = Get-Service -Name $service
     $sName = $info.Name
     $state = $info.Status
     $procPid = $null
@@ -191,9 +194,9 @@ foreach ($service in $serviceInfo) {
   $statusColor = if ($service.State -eq "Running") { "Green" } else { "Red" }
   $startTime = if ($service.Start) { $service.Start.ToString($formatDate) } else { "Unknown" }
 
-  Write-Host $titleIndex ("{0,-11}" -f $service.Name) -ForegroundColor White -NoNewline
-  Write-Host ("{0}`t" -f $service.State) -ForegroundColor $statusColor -NoNewline
-  Write-Host $startTime -ForegroundColor Gray
+  Write-Host $titleIndex ("{0,-11}" -f $service.Name) -ForegroundColor $textColor -NoNewline
+  Write-Host "$($service.State)`t" -ForegroundColor $statusColor -NoNewline
+  Write-Host $startTime -ForegroundColor $subtColor
 }
 
 Write-Host "`nSUSPICIOUS EVENT LOGS" -ForegroundColor $titleColor
@@ -203,27 +206,27 @@ $events = @(
   @{Message   = "USN Journal Cleared"
     Log       = "(Application 3079)"
     Registry  = "$winevt\Microsoft-Windows-Ntfs/Operational"
-    LastEvent = Get-Winevent -LogName "Application" -FilterXPath "*[System[EventID=3079]]" -MaxEvents 1 -ErrorAction SilentlyContinue
+    LastEvent = Get-Winevent -LogName "Application" -FilterXPath "*[System[EventID=3079]]" -MaxEvents 1
   }
   @{Message   = "Event Logs Cleared"
     Log       = "(System 104)"
     Registry  = "$eventLog\Application"
-    LastEvent = Get-Winevent -LogName "System" -FilterXPath "*[System[EventID=104]]" -MaxEvents 1 -ErrorAction SilentlyContinue
+    LastEvent = Get-Winevent -LogName "System" -FilterXPath "*[System[EventID=104]]" -MaxEvents 1
   }
   @{Message   = "Security Log Cleared"
     Log       = "(Security 1102)"
     Registry  = "$eventLog\Security"
-    LastEvent = Get-Winevent -LogName "Security" -FilterXPath "*[System[EventID=1102]]" -MaxEvents 1 -ErrorAction SilentlyContinue
+    LastEvent = Get-Winevent -LogName "Security" -FilterXPath "*[System[EventID=1102]]" -MaxEvents 1
   }
   @{Message   = "EventLog Started"
     Log       = "(System 6005)"
     Registry  = "$eventLog\System"
-    LastEvent = Get-Winevent -LogName "System" -FilterXPath "*[System[EventID=6005]]" -MaxEvents 1 -ErrorAction SilentlyContinue
+    LastEvent = Get-Winevent -LogName "System" -FilterXPath "*[System[EventID=6005]]" -MaxEvents 1
   }
   @{Message   = "System time changed"
     Log       = "(Security 4616)"
     Registry  = "$eventLog\Security"
-    LastEvent = Get-Winevent -LogName "Security" -FilterXPath "*[System[EventID=4616]]" -MaxEvents 1 -ErrorAction SilentlyContinue
+    LastEvent = Get-Winevent -LogName "Security" -FilterXPath "*[System[EventID=4616]]" -MaxEvents 1
   }
 )
 
@@ -234,17 +237,17 @@ foreach ($event in $events) {
   $color = if ($lastEvent -eq "No records found") { "Yellow" } else { "Green" }
   $lwt = [RegUtil]::GetLastWriteTime($event.Registry).ToString($formatDate)
 
-  Write-Host $titleIndex ("{0,-20}: " -f $event.Message) -ForegroundColor White -NoNewline
+  Write-Host $titleIndex ("{0,-20}: " -f $event.Message) -ForegroundColor $textColor -NoNewline
   Write-Host ("{0,-20} " -f $lastEvent) -ForegroundColor $color -NoNewline
-  Write-Host $event.Log -ForegroundColor Gray
+  Write-Host $event.Log -ForegroundColor $subtColor
 
-  Write-Host $titleIndex " |- Last modified: $lwt`n"
+  Write-Host $titleIndex " Last modified: $lwt`n"
 }
 
 Write-Host "`nCOMMON FILES" -ForegroundColor $titleColor
 
 $recyclePath = "$env:SystemDrive\`$Recycle.bin"
-Write-Host $titleIndex "Recycle Bin" -ForegroundColor Gray
+Write-Host $titleIndex "Recycle Bin" -ForegroundColor $subtColor
 
 if (Test-Path $recyclePath) {
   $file = Get-Item -LiteralPath $recyclePath -Force
@@ -253,7 +256,7 @@ if (Test-Path $recyclePath) {
   $totalItems = 0
   $lastItem = $null
 
-  Get-ChildItem -LiteralPath $recyclePath -Force -ErrorAction SilentlyContinue | ForEach-Object {
+  Get-ChildItem -LiteralPath $recyclePath -Force | ForEach-Object {
     if ($_.LastWriteTime -ge $lastModified) { $lastModified = $_.LastWriteTime }
       
     Get-ChildItem -LiteralPath $_.FullName -Force | 
@@ -264,31 +267,31 @@ if (Test-Path $recyclePath) {
     }
   }
 
-  Write-Host $inforIndex "Total Items: `t" -ForegroundColor White -NoNewline
-  Write-Host $totalItems -ForegroundColor Gray
+  Write-Host $inforIndex "Total Items:       " -ForegroundColor $textColor -NoNewline
+  Write-Host $totalItems -ForegroundColor $subtColor
     
-  Write-Host $inforIndex "Last Deleted Item:`t" -ForegroundColor White -NoNewline
+  Write-Host $inforIndex "Last Deleted Item: " -ForegroundColor $textColor -NoNewline
 
   if ($lastItem) { 
-    Write-Host $lastItem.Name -ForegroundColor Gray 
+    Write-Host $lastItem.Name -ForegroundColor $subtColor 
   }
   else { 
-    Write-Host "No items found" -ForegroundColor Gray 
+    Write-Host "No items found" -ForegroundColor $subtColor 
   }
 
-  Write-Host $inforIndex "Modified Time:`t" -ForegroundColor White -NoNewline
-  Write-Host $lastModified -ForegroundColor Gray
+  Write-Host $inforIndex "Modified Time:     " -ForegroundColor $textColor -NoNewline
+  Write-Host $lastModified -ForegroundColor $subtColor
 }
 else {
   Write-Host $inforIndex "$recyclePath not found." -ForegroundColor Red
 }
 
 Write-Host ""
-Write-Host $titleIndex "Console Host History" -ForegroundColor Gray
+Write-Host $titleIndex "Console Host History" -ForegroundColor $subtColor
 $consoleHistPath = (Get-PSReadLineOption).HistorySavePath
 
 if (Test-Path $consoleHistPath) {
-  $file = Get-Item -LiteralPath $consoleHistPath -Force -ErrorAction SilentlyContinue
+  $file = Get-Item -LiteralPath $consoleHistPath -Force
   $lastLine = Get-Content -LiteralPath $consoleHistPath -Last 1
 
   $attributes = $file.Attributes
@@ -298,21 +301,21 @@ if (Test-Path $consoleHistPath) {
   $color = if ($status -eq "Normal") { "Green" } else { "Red" }
   $lastCommand = if ($lastLine -eq "}") { "ScriptBlock" } else { $lastLine }
 
-  Write-Host $inforIndex "Last Command:`t" -ForegroundColor White -NoNewline
-  Write-Host $lastCommand -ForegroundColor Gray
+  Write-Host $inforIndex "Last Command:    " -ForegroundColor $textColor -NoNewline
+  Write-Host $lastCommand -ForegroundColor $subtColor
 
-  Write-Host $inforIndex "File Attributes:`t" -ForegroundColor White -NoNewline
+  Write-Host $inforIndex "File Attributes: " -ForegroundColor $textColor -NoNewline
   Write-Host $status -ForegroundColor $color
 
-  Write-Host $inforIndex "Modified Time:`t" -ForegroundColor White -NoNewline
-  Write-Host $lastModified -ForegroundColor Gray
+  Write-Host $inforIndex "Modified Time:   " -ForegroundColor $textColor -NoNewline
+  Write-Host $lastModified -ForegroundColor $subtColor
 }
 else {
   Write-Host $inforIndex "$consoleHistPath not found." -ForegroundColor Red
 }
 
 Write-Host ""
-Write-Host $titleIndex "Hosts" -ForegroundColor Gray
+Write-Host $titleIndex "Hosts" -ForegroundColor $subtColor
 $hostsPath = "$env:SystemRoot\System32\Drivers\etc\hosts"
 
 if (Test-Path $hostsPath) {
@@ -326,13 +329,13 @@ if (Test-Path $hostsPath) {
 
   $sLines = 0
 
-  Write-Host $inforIndex "File Attributes:`t" -ForegroundColor White -NoNewline
+  Write-Host $inforIndex "File Attributes:  " -ForegroundColor $textColor -NoNewline
   Write-Host $attributes -ForegroundColor $aColor
   
-  Write-Host $inforIndex "Modified Time:`t" -ForegroundColor White -NoNewline
-  Write-Host $lastModified -ForegroundColor Gray
+  Write-Host $inforIndex "Modified Time:    " -ForegroundColor $textColor -NoNewline
+  Write-Host $lastModified -ForegroundColor $subtColor
 
-  Write-Host $inforIndex "Suspicious Lines:`t" -ForegroundColor White -NoNewline
+  Write-Host $inforIndex "Suspicious Lines: " -ForegroundColor $textColor -NoNewline
   foreach ($line in $content) {
     if ($line.StartsWith("#")) { continue }
     elseif ([string]::IsNullOrEmpty($line)) { continue }
@@ -344,7 +347,7 @@ if (Test-Path $hostsPath) {
     $sLines++
 
     if ($sLines -le 3) { 
-      Write-Host $inforIndex " |- " -ForegroundColor Gray -NoNewline
+      Write-Host $inforIndex " |- " -ForegroundColor $subtColor -NoNewline
       Write-Host $line -ForegroundColor Red
     }
   }
@@ -352,9 +355,9 @@ if (Test-Path $hostsPath) {
   if ($sLines) {
     $otherLines = ($sLines - 3)
     if ($otherLines -gt 0) {
-      Write-Host $inforIndex " |- And" -ForegroundColor Gray -NoNewline
+      Write-Host $inforIndex " |- And" -ForegroundColor $subtColor -NoNewline
       Write-Host " $otherLines " -ForegroundColor Red -NoNewline
-      Write-Host "more..." -ForegroundColor Gray
+      Write-Host "more..." -ForegroundColor $subtColor
     }
   }
   else { 
@@ -379,13 +382,13 @@ try {
   $jrnlState = $journalInfo[5].Substring(4) 
   $sColor = if ($jrnlState -eq '$UsnJrnl:$J Intact!') { "Green" } else { "Red" }
 
-  Write-Host $inforIndex "File Path:`t" -ForegroundColor White -NoNewline
+  Write-Host $inforIndex "File Path: " -ForegroundColor $textColor -NoNewline
   Write-Host $jrnlPath
 
-  Write-Host $inforIndex "Created:`t" -ForegroundColor White -NoNewline
+  Write-Host $inforIndex "Created:   " -ForegroundColor $textColor -NoNewline
   Write-Host $jrnlCreation
 
-  Write-Host $inforIndex "State:`t" -ForegroundColor White -NoNewline
+  Write-Host $inforIndex "State:     " -ForegroundColor $textColor -NoNewline
   Write-Host $jrnlState -ForegroundColor $sColor
 }
 catch {
@@ -393,14 +396,14 @@ catch {
 }
 
 Write-Host ""
-Write-Host $titleIndex "TEMP" -ForegroundColor Gray
+Write-Host $titleIndex "TEMP" -ForegroundColor $subtColor
 $tmp = $env:TEMP
 
 if (Test-Path $tmp) {
-  $jnativeHook = Get-ChildItem -LiteralPath $tmp -Filter "JNativeHook*" -Force -ErrorAction SilentlyContinue
-  $javaLauncher = Get-Item -LiteralPath "$tmp\JavaLauncher.log" -Force -ErrorAction SilentlyContinue
+  $jnativeHook = Get-ChildItem -LiteralPath $tmp -Filter "JNativeHook*" -Force
+  $javaLauncher = Get-Item -LiteralPath "$tmp\JavaLauncher.log" -Force
   
-  Write-Host $inforIndex "Javalauncher: " -ForegroundColor White -NoNewline
+  Write-Host $inforIndex "Javalauncher: " -ForegroundColor $textColor -NoNewline
   if ($javaLauncher) {
     $content = Get-Content -LiteralPath $javaLauncher.FullName
     $javaExecutions = @{}
@@ -431,29 +434,28 @@ if (Test-Path $tmp) {
       $color = "Yellow"
     }
 
-    Write-Host "JavaLauncher.log found" -ForegroundColor Gray
+    Write-Host "JavaLauncher.log found" -ForegroundColor $subtColor
     
     $attributes = $javaLauncher.Attributes
     $aColor = if ($attributes -eq [IO.FileAttributes]::Archive) { "Green" } else { "Red" }
 
-    Write-Host $inforIndex "`tFile Attributes: " -ForegroundColor White -NoNewline
+    Write-Host $inforIndex "`tFile Attributes: " -ForegroundColor $textColor -NoNewline
     Write-Host $attributes -ForegroundColor $aColor
 
     $executions = $javaExecutions.GetEnumerator().Count -ge 1
+    Write-Host "`tExecution(s) found:" -ForegroundColor $textColor
 
     if ($executions) {
-      Write-Host "`tExecution(s) found:" -ForegroundColor White
       $counter = 0
       $javaExecutions.GetEnumerator() | ForEach-Object {
         $counter++
         $eTime = $_.Value.ToString($formatDate)
         
-        Write-Host "`t$counter. $($eTime): " -ForegroundColor Gray -NoNewline
+        Write-Host "`t$counter. $($eTime): " -ForegroundColor $subtColor -NoNewline
         Write-Host $_.Key -ForegroundColor $color
       }
     }
     else {
-      Write-Host $inforIndex "`tEntries: " -ForegroundColor White -NoNewline
       Write-Host "No entries found" -ForegroundColor Green
     }
   }
@@ -462,16 +464,16 @@ if (Test-Path $tmp) {
   }
 
   Write-Host ""
-  Write-Host $inforIndex "JNativeHook:  " -ForegroundColor White -NoNewline
+  Write-Host $inforIndex "JNativeHook:  " -ForegroundColor $textColor -NoNewline
 
   if ($jnativeHook) {
-    Write-Host "JnativeHook files found" -ForegroundColor Gray
+    Write-Host "JnativeHook files found" -ForegroundColor $subtColor
     
     $counter = 0
     $jnativeHook | ForEach-Object {
       $counter++
       $lwt = $_.LastWriteTime.ToString($formatDate)
-      Write-Host $inforIndex "`t$counter. $($lwt): " -ForegroundColor Gray -NoNewline
+      Write-Host $inforIndex "`t$counter. $($lwt): " -ForegroundColor $subtColor -NoNewline
       Write-Host $_.FullName -ForegroundColor Yellow
     }
   }
@@ -487,10 +489,10 @@ Write-Host "`nPREFETCH INTEGRITY" -ForegroundColor $titleColor
 
 $prefetchPath = "$env:SystemRoot\Prefetch"
 
-Write-Host $titleIndex "Prefetch status: " -ForegroundColor White -NoNewline
-Write-Host "Scanning..." -ForegroundColor Gray -NoNewline
+Write-Host $titleIndex "Prefetch status: " -ForegroundColor $textColor -NoNewline
+Write-Host "Scanning..." -ForegroundColor $subtColor -NoNewline
 
-Write-Host ("`r{0,1}" -f "") "Prefetch status: " -ForegroundColor White -NoNewline
+Write-Host ("`r{0,1}" -f "") "Prefetch status: " -ForegroundColor $textColor -NoNewline
 
 if (Test-Path $prefetchPath) {
   $files = Get-ChildItem -LiteralPath $prefetchPath -Filter *.pf -Force
@@ -500,7 +502,7 @@ if (Test-Path $prefetchPath) {
 
   foreach ($file in $files) {
     $fileName = $file.Name
-    $sha256 = (Get-FileHash -Path $file.FullName -Algorithm SHA256 -ErrorAction SilentlyContinue).Hash
+    $sha256 = (Get-FileHash -Path $file.FullName -Algorithm SHA256).Hash
     $hash = if ($sha256) { $sha256 } else { "Unknown" }
     $isHidden = $file.Attributes -band [IO.FileAttributes]::Hidden
 
@@ -521,7 +523,7 @@ if (Test-Path $prefetchPath) {
       if ($suspiciousFiles -eq 0) { Write-Host "Suspicious `n" -ForegroundColor Yellow }
       Write-Int $inforIndex "-" "Read-Only and Hidden file"
 
-      Write-Host $inforIndex " |- File: " -ForegroundColor Gray -NoNewline
+      Write-Host $inforIndex " |- File: " -ForegroundColor $subtColor -NoNewline
       Write-Host $fileName -ForegroundColor Red 
       Write-Host ""
 
@@ -532,7 +534,7 @@ if (Test-Path $prefetchPath) {
       if ($suspiciousFiles -eq 0) { Write-Host "Suspicious `n" -ForegroundColor Yellow }
       Write-Int $inforIndex "-" "Read-Only file"
 
-      Write-Host $inforIndex " |- File: " -ForegroundColor Gray -NoNewline
+      Write-Host $inforIndex " |- File: " -ForegroundColor $subtColor -NoNewline
       Write-Host $fileName -ForegroundColor Red
       Write-Host ""
 
@@ -543,7 +545,7 @@ if (Test-Path $prefetchPath) {
       if ($suspiciousFiles -eq 0) { Write-Host "Suspicious `n" -ForegroundColor Yellow }
       Write-Int $inforIndex "-" "Hidden file"
 
-      Write-Host $inforIndex " |- File: " -ForegroundColor Gray -NoNewline
+      Write-Host $inforIndex " |- File: " -ForegroundColor $subtColor -NoNewline
       Write-Host $fileName -ForegroundColor Red
       Write-Host ""
 
@@ -566,7 +568,7 @@ if (Test-Path $prefetchPath) {
         if ($suspiciousFiles -eq 0) { Write-Host "Suspicious `n" -ForegroundColor Yellow }
         Write-Int $inforIndex "-" "Does not contain 'MAM'"
 
-        Write-Host $inforIndex " |- File: " -ForegroundColor Gray -NoNewline
+        Write-Host $inforIndex " |- File: " -ForegroundColor $subtColor -NoNewline
         Write-Host $fileName -ForegroundColor Red
         Write-Host ""
 
@@ -581,7 +583,7 @@ if (Test-Path $prefetchPath) {
 
       Write-Int $inforIndex "-" "Duplicated Hash"
 
-      Write-Host $inforIndex " |- Files: " -ForegroundColor Gray -NoNewline
+      Write-Host $inforIndex " |- Files: " -ForegroundColor $subtColor -NoNewline
       $counter = $_.Value.Count
 
       foreach ($file in $_.Value) {
@@ -589,11 +591,11 @@ if (Test-Path $prefetchPath) {
         $comma = if ($counter -eq 0) { "" } else { "," }
 
         Write-Host $file -ForegroundColor Red -NoNewline
-        Write-Host ("{0} " -f $comma) -ForegroundColor Gray -NoNewline
+        Write-Host ("{0} " -f $comma) -ForegroundColor $subtColor -NoNewline
       }
 
       Write-Host ""
-      Write-Host $inforIndex (" |- Hash:  {0}" -f $_.Key) -ForegroundColor Gray
+      Write-Host $inforIndex " |- Hash:  $($_.Key)" -ForegroundColor $subtColor
     }
   }
 
@@ -608,29 +610,45 @@ else {
 Write-Host "`nREGISTRY" -ForegroundColor $titleColor
 
 $registryItems = @(
-  @{Name = "Command Prompt"
-    Path = "HKCU:\Software\Policies\Microsoft\Windows\System"
-    Key  = "DisableCMD"
+  @{Name     = "PowerShell Logging"
+    Path     = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging"
+    Key      = "EnableScriptBlockLogging"
+    Disabled = 0
   },
-  @{Name = "PowerShell Logging"
-    Path = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging"
-    Key  = "EnableScriptBlockLogging"
+  @{Name     = "Activities Cache"
+    Path     = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System"
+    Key      = "EnableActivityFeed"
+    Disabled = 0
   },
-  @{Name = "Activities Cache"
-    Path = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System"
-    Key  = "EnableActivityFeed"
+  @{Name     = "Prefetch Enabled"
+    Path     = "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters"
+    Key      = "EnablePrefetcher"
+    Disabled = 0
   },
-  @{Name = "Prefetch Enabled"
-    Path = "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters"
-    Key  = "EnablePrefetcher"
+  @{Name     = "PCA Client Enabled"
+    Path     = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\AppCompat"
+    Key      = "DisabledPCA"
+    Disabled = 1
+  },
+  @{Name     = "Command Prompt"
+    Path     = "HKCU:\Software\Policies\Microsoft\Windows\System"
+    Key      = "DisableCMD"
+    Disabled = 1
   }
 )
 
 foreach ($item in $registryItems) {
-  $itemProperty = Get-ItemProperty -LiteralPath $item.Path -Name $item.Key -ErrorAction SilentlyContinue
+  $itemProperty = Get-ItemProperty -LiteralPath $item.Path -Name $item.Key
   $color = "Green"
+  $lwt = $null
   
-  if ($itemProperty -and $itemProperty.$($item.Key) -eq 0) { 
+  if ($item.Path.StartsWith("HKLM:\")) {
+    $rPath = $item.Path.TrimStart("HKLM:\")
+    $lwt = [RegUtil]::GetLastWriteTime($rPath).ToString($formatDate)
+    $lwt = if ($lwt -eq "31-12-1600 21:00:00") { "(Never Modified)" } else { "($lwt)" }
+  }
+
+  if ($itemProperty.$($item.Key) -eq $item.Disabled) { 
     $status = "Disabled"
     $color = "Red"  
   } 
@@ -638,11 +656,12 @@ foreach ($item in $registryItems) {
     $status = if ($item.Name -ne "Command Prompt") { "Enabled" } else { "Available" }
   }
 
-  Write-Host $inforIndex ("{0}:`t" -f $item.Name) -ForegroundColor White -NoNewline
-  Write-Host $status -ForegroundColor $color
+  Write-Host $inforIndex "$($item.Name):`t" -ForegroundColor $textColor -NoNewline
+  Write-Host $status -ForegroundColor $color -NoNewline
+  Write-Host "`t  $lwt"
 }
 
-Write-Host $inforIndex "Debuggers (IFEO):`t" -ForegroundColor White -NoNewline
+Write-Host $inforIndex "Debuggers (IFEO):`t" -ForegroundColor $textColor -NoNewline
 try {
   $counter = 1
   $currentVersion = Get-ChildItem -LiteralPath "HKLM:\Software\Microsoft\Windows NT\CurrentVersion" -ErrorAction Stop
@@ -654,57 +673,56 @@ catch {
   Write-Host "$($_.Exception): $($_.TargetObject)!" -ForegroundColor Yellow -NoNewline
 }
 finally {
-  $currentVersion = Get-ChildItem -LiteralPath "HKLM:\Software\Microsoft\Windows NT\CurrentVersion" -ErrorAction SilentlyContinue
-}
-
-foreach ($folder in $currentVersion) {
-  try {
-    $items = Get-ChildItem -LiteralPath $folder.PSPath -ErrorAction Stop
-  }
-  catch [Security.SecurityException] {
-    $exception = "Denied access"
-    $target = $_.TargetObject
-  }
-  catch {
-    $exception = $_.Exception
-    $target = $_.TargetObject
-  }
-  finally {
-    $items = Get-ChildItem -LiteralPath $folder.PSPath -ErrorAction SilentlyContinue
-  }
-
-  $items | ForEach-Object {
-    $debugger = (Get-ItemProperty $_.PSPath).Debugger
-    
-    if ($debugger) {
-
-      if ($counter -eq 1) {
-        Write-Host "Debuggers found`n" -ForegroundColor Red
-      }
-
-      Write-Int $inforIndex $counter "Debugger found"
+  $currentVersion = Get-ChildItem -LiteralPath "HKLM:\Software\Microsoft\Windows NT\CurrentVersion"
+  foreach ($folder in $currentVersion) {
+    try {
+      $items = Get-ChildItem -LiteralPath $folder.PSPath -ErrorAction Stop
+    }
+    catch [Security.SecurityException] {
+      $exception = "Denied access"
+      $target = $_.TargetObject
+    }
+    catch {
+      $exception = $_.Exception
+      $target = $_.TargetObject
+    }
+    finally {
+      $items = Get-ChildItem -LiteralPath $folder.PSPath
+    }
+  
+    $items | ForEach-Object {
+      $debugger = (Get-ItemProperty $_.PSPath).Debugger
       
-      Write-Host $inforIndex " |- Registry Path: " -ForegroundColor Gray -NoNewline
-      Write-Host $_.Name -ForegroundColor Yellow
-
-      Write-Host $inforIndex " |- Executable:    " -ForegroundColor Gray -NoNewline
-      Write-Host $_.PSChildName -ForegroundColor Yellow
-
-      Write-Host $inforIndex " |- Debugger:      " -ForegroundColor Gray -NoNewline
-      Write-Host $debugger -ForegroundColor Yellow
-
-      Write-Host ""
-
-      $counter++
+      if ($debugger) {
+  
+        if ($counter -eq 1) {
+          Write-Host "Debuggers found`n" -ForegroundColor Red
+        }
+  
+        Write-Int $inforIndex $counter "Debugger found"
+        
+        Write-Host $inforIndex " |- Registry Path: " -ForegroundColor $subtColor -NoNewline
+        Write-Host $_.Name -ForegroundColor Yellow
+  
+        Write-Host $inforIndex " |- Executable:    " -ForegroundColor $subtColor -NoNewline
+        Write-Host $_.PSChildName -ForegroundColor Yellow
+  
+        Write-Host $inforIndex " |- Debugger:      " -ForegroundColor $subtColor -NoNewline
+        Write-Host $debugger -ForegroundColor Yellow
+  
+        Write-Host ""
+  
+        $counter++
+      }
     }
   }
-}
-if ($counter -eq 1) {
-  Write-Host "No Debuggers found" -ForegroundColor Green
-} 
-
-if ($exception) {
-  Write-Int $inforIndex "-" "Problem found"
-  Write-Host $inforIndex " |- $exception : " -ForegroundColor Gray -NoNewline
-  Write-Host $target -ForegroundColor Yellow
+  if ($counter -eq 1) {
+    Write-Host "Not found" -ForegroundColor Green
+  } 
+  
+  if ($exception) {
+    Write-Int $inforIndex "-" "Problem found"
+    Write-Host $inforIndex " |- $exception : " -ForegroundColor $subtColor -NoNewline
+    Write-Host $target -ForegroundColor Yellow
+  }
 }
