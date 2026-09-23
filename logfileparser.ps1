@@ -16,7 +16,7 @@ function Download-File($uri, $out) {
         Expand-Archive -Path $out -DestinationPath $outputPath -Force
     }
     catch {
-        $_
+        Write-Host " > Error downloading or extracting '$uri' in '$out': $($_.exception)" -ForegroundColor Red
         exit
     }
 }
