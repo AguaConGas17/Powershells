@@ -258,7 +258,7 @@ $events = @(
   @{Message   = "Last executed pipeline"
     Log       = "(Powsh\Operational 4103)"
     Registry  = "$winevt\Microsoft-Windows-PowerShell/Operational"
-    LastEvent = Get-Winevent -LogName "Security" -FilterXPath "*[System[EventID=4103]]" -MaxEvents 1}
+    LastEvent = Get-Winevent -LogName "Microsoft-Windows-Powershell/Operational" -FilterXPath "*[System[EventID=4103]]" -MaxEvents 1}
 )
 
 $counter = 0
