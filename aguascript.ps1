@@ -78,7 +78,6 @@ public class RegUtil
   }
 }
 "@
-
 function Get-Drives {
   $max = 65536
   $stringBuilder = New-Object Text.StringBuilder($max)
@@ -101,6 +100,34 @@ function Write-Int($indx, $simb, $message) {
   Write-Host "] " -ForegroundColor $subtColor -NoNewline
   
   Write-Host $message -ForegroundColor Yellow
+}
+function Get-Arguments($processID){
+  $commandLine = (Get-CimInstance Win32_Process -filter "ProcessID=$processID").CommandLine
+  $foundArgs = [Collections.Generic.List[object]]::new()
+  $arguments = $commandLine.split("-")
+  $suspiciousArgs = @("Dloader.addMods", "Dloader.modsFolder", "Dloader.modsDir", # quilt
+    "Dfabric.addMods", "Dfabric.modsFolder", # fabric
+    "javaagent", "gamedir", "workdir" # mc 
+  )
+
+  for ($i = 0; $i -lt $arguments.count; $i++) {
+    $arg = $arguments[$i]
+    foreach ($sArg in $suspiciousArgs) {
+      if ($sArg -eq "gamedir" -and $arg -match "gamedir (.+)") {
+        $script:mcFound = $true
+        $script:gamedir = $Matches[1].replace('"', "").trimend(" ")
+      }
+      elseif ($arg -like "$sArg*") {
+        $foundArgs.add(@{
+            argument_name = $sArg
+            argument = $arg.Substring($sArg.length + 1)
+            color = if ($sArg -eq "javaagent" -and $arg.Contains("theseus.jar")) { "Green" } else { "red" }
+        })
+      }
+    }
+  }
+
+  return $foundArgs
 }
 
 $titleIndex = ("{0,1}" -f "")
@@ -125,35 +152,40 @@ Write-Host " $bootTime " -ForegroundColor Green -NoNewline
 Write-Host ("({0}d {1}h {2}m {3}s)" -f $upTime.Days, $upTime.Hours, $upTime.Minutes, $upTime.Seconds) -ForegroundColor $textColor
 
 Write-Host ""
-Write-Host $titleIndex "Minecraft start time" -ForegroundColor $subtColor
-$mcFound = $false
-$hsperfdataPath = Resolve-Path -path "$env:TEMP\hsperfdata*"
-$javaPIDs = Get-ChildItem -Path $hsperfdataPath -Recurse -Force -File
-foreach ($java in $javaPIDs) {
-  $procPid = $java.Name
-  $process = Get-Process -Id $procPid
-  $modules = $process.Modules.FileVersionInfo.InternalName
-
-  if ($modules -contains "jvm") {
-    $mcFound = $true
-    $startTime = $process.StartTime
-    $upTime = $currentDate - $startTime
-    $mName = $process.Name
-  }
-  Write-Host $titleIndex " Minecraft process found: $mName ($procPid) " -ForegroundColor $textColor -NoNewline
-  Write-Host ("{0}d {1}h {2}m {3}s" -f $upTime.Days, $upTime.Hours, $upTime.Minutes, $upTime.Seconds) -ForegroundColor Green
-}
-if (-not $mcFound) {
-  Write-Host $titleIndex " No Minecraft processes found..." -ForegroundColor $textColor 
-}
-
-Write-Host ""
 Write-Host $titleIndex "Connected drives" -ForegroundColor $subtColor
 $drives = Get-Drives
 if ($drives) {
   foreach ($drive in $drives) {
     Write-Host $titleIndex (" {0,-2} {1,-5} {2}" -f $drive.DriveLetter, $drive.FileSystem, $drive.DevicePath) -ForegroundColor $textColor
   }
+}
+
+Write-Host ""
+Write-Host $titleIndex "Minecraft Information" -ForegroundColor $subtColor
+$mcFound = $false
+$hsperfdataPath = Resolve-Path -path "$env:TEMP\hsperfdata*"
+$javaProcs = Get-ChildItem -Path $hsperfdataPath -Recurse -Force -File
+foreach ($java in $javaProcs) {
+  $procID = $java.Name
+  $process = Get-Process -Id $procID
+
+  $startTime = $process.StartTime
+  $upTime = $currentDate - $startTime
+  $mName = $process.MainWindowTitle
+  $arguments = Get-Arguments $procID
+
+  if ($mcFound) {
+    Write-Host $titleIndex " MC process found '$mName' ($procID) " -ForegroundColor $textColor -NoNewline
+    Write-Host ("{0}d {1}h {2}m {3}s" -f $upTime.Days, $upTime.Hours, $upTime.Minutes, $upTime.Seconds) -ForegroundColor $textColor
+    Write-Host $titleIndex " Arguments: "
+    foreach ($arg in $arguments) {
+      Write-Host $inforIndex " $($arg.argument_name): " -ForegroundColor $subtColor -NoNewline
+      Write-Host "$($arg.argument)" -ForegroundColor $arg.color
+    }
+  }
+}
+if (-not $mcFound){
+  Write-Host $titleIndex " No Minecraft processes found..." -ForegroundColor $textColor
 }
 
 Write-Host "`nSERVICE STATUS" -ForegroundColor $titleColor
@@ -206,28 +238,27 @@ $events = @(
   @{Message   = "USN Journal Cleared"
     Log       = "(Application 3079)"
     Registry  = "$winevt\Microsoft-Windows-Ntfs/Operational"
-    LastEvent = Get-Winevent -LogName "Application" -FilterXPath "*[System[EventID=3079]]" -MaxEvents 1
-  }
+    LastEvent = Get-Winevent -LogName "Application" -FilterXPath "*[System[EventID=3079]]" -MaxEvents 1}
   @{Message   = "Event Logs Cleared"
     Log       = "(System 104)"
     Registry  = "$eventLog\Application"
-    LastEvent = Get-Winevent -LogName "System" -FilterXPath "*[System[EventID=104]]" -MaxEvents 1
-  }
+    LastEvent = Get-Winevent -LogName "System" -FilterXPath "*[System[EventID=104]]" -MaxEvents 1}
   @{Message   = "Security Log Cleared"
     Log       = "(Security 1102)"
     Registry  = "$eventLog\Security"
-    LastEvent = Get-Winevent -LogName "Security" -FilterXPath "*[System[EventID=1102]]" -MaxEvents 1
-  }
+    LastEvent = Get-Winevent -LogName "Security" -FilterXPath "*[System[EventID=1102]]" -MaxEvents 1}
   @{Message   = "EventLog Started"
     Log       = "(System 6005)"
     Registry  = "$eventLog\System"
-    LastEvent = Get-Winevent -LogName "System" -FilterXPath "*[System[EventID=6005]]" -MaxEvents 1
-  }
+    LastEvent = Get-Winevent -LogName "System" -FilterXPath "*[System[EventID=6005]]" -MaxEvents 1}
   @{Message   = "System time changed"
     Log       = "(Security 4616)"
     Registry  = "$eventLog\Security"
-    LastEvent = Get-Winevent -LogName "Security" -FilterXPath "*[System[EventID=4616]]" -MaxEvents 1
-  }
+    LastEvent = Get-Winevent -LogName "Security" -FilterXPath "*[System[EventID=4616]]" -MaxEvents 1}
+  @{Message   = "Last executed pipeline"
+    Log       = "(Powsh\Operational 4103)"
+    Registry  = "$winevt\Microsoft-Windows-PowerShell/Operational"
+    LastEvent = Get-Winevent -LogName "Security" -FilterXPath "*[System[EventID=4103]]" -MaxEvents 1}
 )
 
 $counter = 0
@@ -613,28 +644,23 @@ $registryItems = @(
   @{Name     = "PowerShell Logging"
     Path     = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging"
     Key      = "EnableScriptBlockLogging"
-    Disabled = 0
-  },
+    Disabled = 0}
   @{Name     = "Activities Cache"
     Path     = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System"
     Key      = "EnableActivityFeed"
-    Disabled = 0
-  },
+    Disabled = 0}
   @{Name     = "Prefetch Enabled"
     Path     = "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters"
     Key      = "EnablePrefetcher"
-    Disabled = 0
-  },
+    Disabled = 0}
   @{Name     = "PCA Client Enabled"
     Path     = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\AppCompat"
     Key      = "DisabledPCA"
-    Disabled = 1
-  },
+    Disabled = 1}
   @{Name     = "Command Prompt"
     Path     = "HKCU:\Software\Policies\Microsoft\Windows\System"
     Key      = "DisableCMD"
-    Disabled = 1
-  }
+    Disabled = 1}
 )
 
 foreach ($item in $registryItems) {
@@ -645,7 +671,7 @@ foreach ($item in $registryItems) {
   if ($item.Path.StartsWith("HKLM:\")) {
     $rPath = $item.Path.TrimStart("HKLM:\")
     $lwt = [RegUtil]::GetLastWriteTime($rPath).ToString($formatDate)
-    $lwt = if ($lwt -eq "31-12-1600 21:00:00") { "(Never Modified)" } else { "($lwt)" }
+    $lwt = if ($lwt -eq "31-12-1600 21:00:00" -or $lwt -eq $bootTime.ToString($formatDate)) { "(Never Modified)" } else { "($lwt)" }
   }
 
   if ($itemProperty.$($item.Key) -eq $item.Disabled) { 
