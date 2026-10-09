@@ -148,7 +148,7 @@ Write-Host $titleIndex "System boot time" -ForegroundColor $subtColor
 $bootTime = (Get-CimInstance -ClassName Win32_OperatingSystem).LastBootUpTime
 $upTime = $currentDate - $bootTime
 Write-Host $titleIndex " Last Boot:" -ForegroundColor $textColor -NoNewline
-Write-Host " $bootTime " -ForegroundColor Green -NoNewline
+Write-Host " $($bootTime.ToString($formatDate)) " -ForegroundColor Green -NoNewline
 Write-Host ("({0}d {1}h {2}m {3}s)" -f $upTime.Days, $upTime.Hours, $upTime.Minutes, $upTime.Seconds) -ForegroundColor $textColor
 
 Write-Host ""
@@ -162,10 +162,10 @@ if ($drives) {
 
 Write-Host ""
 Write-Host $titleIndex "Minecraft Information" -ForegroundColor $subtColor
-$mcFound = $false
 $hsperfdataPath = Resolve-Path -path "$env:TEMP\hsperfdata*"
 $javaProcs = Get-ChildItem -Path $hsperfdataPath -Recurse -Force -File
 foreach ($java in $javaProcs) {
+  $mcFound = $false
   $procID = $java.Name
   $process = Get-Process -Id $procID
 
@@ -177,18 +177,22 @@ foreach ($java in $javaProcs) {
   if ($mcFound) {
     Write-Host $titleIndex " MC process found '$mName' ($procID) " -ForegroundColor $textColor -NoNewline
     Write-Host ("{0}d {1}h {2}m {3}s" -f $upTime.Days, $upTime.Hours, $upTime.Minutes, $upTime.Seconds) -ForegroundColor $textColor
-    Write-Host $titleIndex " Arguments: "
-    foreach ($arg in $arguments) {
-      Write-Host $inforIndex " $($arg.argument_name): " -ForegroundColor $subtColor -NoNewline
-      Write-Host "$($arg.argument)" -ForegroundColor $arg.color
+    Write-Host $titleIndex " Folder: '$gamedir'"
+    if ($arguments){
+      Write-Host $titleIndex " Arguments: "
+      foreach ($arg in $arguments) {
+        Write-Host $inforIndex " $($arg.argument_name): " -ForegroundColor $subtColor -NoNewline
+        Write-Host "$($arg.argument)" -ForegroundColor $arg.color
+      }
     }
   }
+  Write-Host ""
 }
 if (-not $mcFound){
   Write-Host $titleIndex " No Minecraft processes found..." -ForegroundColor $textColor
 }
 
-Write-Host "`nSERVICE STATUS" -ForegroundColor $titleColor
+Write-Host "SERVICE STATUS" -ForegroundColor $titleColor
 
 $services = ("SysMain", "PcaSvc", "DPS", "EventLog", "Schedule", "Diagtrack", "Dusmsvc", "Appinfo", "DcomLaunch", "wsearch", "BAM")
 $serviceInfo = [Collections.Generic.List[object]]::new()
@@ -670,8 +674,8 @@ foreach ($item in $registryItems) {
   
   if ($item.Path.StartsWith("HKLM:\")) {
     $rPath = $item.Path.TrimStart("HKLM:\")
-    $lwt = [RegUtil]::GetLastWriteTime($rPath).ToString($formatDate)
-    $lwt = if ($lwt -eq "31-12-1600 21:00:00" -or $lwt -eq $bootTime.ToString($formatDate)) { "(Never Modified)" } else { "($lwt)" }
+    $lwt = [RegUtil]::GetLastWriteTime($rPath).ToString("yyyy-MM-dd HH:mm")
+    $lwt = if ($lwt -eq "31-12-1600 21:00:00" -or $lwt -eq $bootTime.ToString("yyyy-MM-dd HH:mm")) { "(Never Modified)" } else { "($lwt)" }
   }
 
   if ($itemProperty.$($item.Key) -eq $item.Disabled) { 
