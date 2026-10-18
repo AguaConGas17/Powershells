@@ -93,3 +93,5 @@ foreach ($pcaLog in @($pcaGeneral, $pcaAppLaunchDic)) {
         Write-Host ("The file " + $pcaLog.Path + " was not found...")
     }
 }
+
+Read-Host
