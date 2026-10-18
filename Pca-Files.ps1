@@ -1,93 +1,95 @@
-function ConvertFrom-UTC {
-  param ( [string]$time )
-
-  if ([string]::IsNullOrWhiteSpace($time)){ return $null }
-  
-  try{
-    $date = [datetime]$time
-    return [datetime]::SpecifyKind($date, [DateTimeKind]::Utc).ToLocalTime()
-  } catch{ return $null }
-}
-function Get-Signature($path) { #function by diff xd
-  if ([string]::IsNullOrWhiteSpace($path) -or !(Test-Path -Path $path -PathType Leaf)) {
-      return "NotFound"
-  }
-  try {
-      $cert = [System.Security.Cryptography.X509Certificates.X509Certificate2]::CreateFromSignedFile($path)
-      $cert2 = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2 $cert
-      $cheatSignatures = @("manthe industries, llc", "slinkware", "amstion limited", "newfakeco", "faked signatures inc")
-      foreach ($cheat in $cheatSignatures) {
-          if ($cert2.Subject.ToLower().Contains($cheat.ToLower())) {
-              return "Cheat Signature"
-          }
-      }
-      $chain = New-Object System.Security.Cryptography.X509Certificates.X509Chain
-      $chain.ChainPolicy.RevocationMode = [System.Security.Cryptography.X509Certificates.X509RevocationMode]::NoCheck
-      $chain.ChainPolicy.VerificationFlags = [System.Security.Cryptography.X509Certificates.X509VerificationFlags]::AllowUnknownCertificateAuthority -bor [System.Security.Cryptography.X509Certificates.X509VerificationFlags]::IgnoreNotTimeValid
-      $isValid = $chain.Build($cert2)
-      if ($isValid -and $chain.ChainElements.Count -gt 1) {
-          return "Signed"
-      } elseif ($cert2.Subject -eq $cert2.Issuer) {
-          return "Fake Sig"
-      } else {
-          return "Fake Sig"
-      }
-  } catch {
-      return "Unsigned"
-  }
-}
-$logonT = (Get-CimInstance Win32_LogonSession -filter LogonType=2 | Sort StartTime | Select -Last 1).StartTime.ToString("HH:mm:ss dd-MM-yyyy")
-$paths = @("C:\Windows\appcompat\pca\PcaAppLaunchDic.txt", "C:\Windows\appcompat\pca\PcaGeneralDb0.txt")
-$response = @()
-
-Write-Host "Do you want read PcaAppLaunchDic? (y/n): " -NoNewline
-$response += [console]::ReadKey()
-Write-Host ""
-
-Write-Host "Do you want read PcaGeneralDb0? (y/n): " -NoNewline
-$response += [console]::ReadKey()
-Write-Host ""
-
-if ($response[0].key -eq "y"){
-  if (Test-Path $paths[0]){
-    $output = switch -File $paths[0]{
-      { [string]::IsNullOrWhiteSpace($_) } { continue }
-      default{
-        $line = $_ -split "\|"
-
-        [PSCustomObject]@{
-          Path = $line[0]
-          Signature = Get-Signature -Path $line[0]
-          ExecutionTime = ConvertFrom-UTC -time $line[1]
+using namespace System.Security.Cryptography.X509Certificates
+function Get-Signature($path) {
+    try {
+        $cheatSignatures = @(
+            "manthe industries, llc", "slinkware", "amstion limited", "newfakeco", 
+            "prestige software development","faked signatures inc")
+        $cert = [X509Certificate2]::CreateFromSignedFile($path)
+        $signer = $cert.Subject.ToLower()
+        
+        foreach ($signature in $cheatSignatures) {
+            if ($signer.Contains($signature)) {
+                return "CheatSignature"
+            }
         }
-      }
-    }
-    $output | Out-GridView -Title "$($paths[0]) results. LogonTime: $logonT"
-  } else { Write-Host -f Red "File $($paths[0]) doesn't exist." }
-}
-if ($response[1].key -eq "y"){
-  if (Test-Path $paths[1]){
-    $output = switch -File $paths[1]{
-      { [string]::IsNullOrWhiteSpace($_) } { continue }
-      default{
-        $line = ($_ -replace "`0", "") -split "\|" # replace bc is utf-16
-        $path = [Environment]::ExpandEnvironmentVariables($line[2])
 
-        [PSCustomObject]@{
-          Path          = $path
-          Signature     = Get-Signature -Path $path
-          ExecutionTime = ConvertFrom-UTC -time $line[0]
-          RunStatus     = $line[1]
-          Product       = $line[3]
-          Copyright     = $line[4]
-          Version       = $line[5]
-          ProgramID     = $line[6]
-          ExitCode      = $line[7]
+        $chain = [X509Chain]::new()
+        $chain.ChainPolicy.VerificationFlags = [X509VerificationFlags]::IgnoreNotTimeValid
+        $valid = $chain.Build($cert)
+
+        if ($valid -and $chain.ChainElements.Count -gt 1) { 
+            return "Signed" 
         }
-      }
+        elseif ($signer -eq $cert.Issuer) { 
+            return "FakeSignature" 
+        }
+        else { return "FakeSignature" }
     }
-    $output | Out-GridView -Title "$($paths[1]) results. LogonTime: $logonT"
-  } else { Write-Host -f Red "File $($paths[1]) doesn't exist." }
+    catch { return "Unsigned" }
 }
 
-pause #lolaso
+$osVersion = Get-CimInstance Win32_OperatingSystem | Select-Object @{ Name = "Version"; Expression = { [version]$_.version } }, Caption
+$logonTime = (Get-CimInstance Win32_LogonSession -Filter "LogonType='2'" | Sort-Object StartTime -Descending)[0].StartTime
+$pcaPath = "$env:SystemRoot\appcompat\pca"
+$pcaGeneral = @{
+    Path = "$pcaPath\PcaGeneralDb0.txt"
+    Encoding = [System.Text.Encoding]::Unicode 
+    Headers = @("ExecutionTime (Local)", "RecordType", "FilePath", "ProductName", "CompanyName", "ProductVersion", "ProgramID", "Message", "Signature")
+}
+$pcaAppLaunchDic = @{
+    Path = "$pcaPath\PcaAppLaunchDic.txt"
+    Encoding = [System.Text.Encoding]::Default 
+    Headers = @("FilePath", "ExecutionTime (Local)", "Signature")
+}
+
+Write-Host ("Detected Windows version: " + $osVersion.Caption)
+
+if ($osVersion.Version.Build -lt 22000) {
+    Write-Host "$pcaPath is available only on Windows 11 and later..."
+    exit
+}
+
+foreach ($pcaLog in @($pcaGeneral, $pcaAppLaunchDic)) {
+    $logExistence = Test-Path -LiteralPath $pcaLog.Path
+    if ($logExistence) {
+        $content = [System.IO.File]::ReadAllLines($pcaLog.Path, $pcaLog.Encoding)
+        $csvContent = ConvertFrom-Csv -InputObject $content -Delimiter "|" -Header $pcaLog.Headers
+        
+        Write-Host $content.count lines found in $pcaLog.Path
+    
+        foreach ($entrie in $csvContent) {
+            $filePath = $entrie.FilePath
+            [datetime]$executionTime = $entrie."ExecutionTime (Local)"
+            $signature = "NotFound"
+    
+            if ($filePath.StartsWith("%")) {
+                $match = [regex]::Match($filePath, "(%.+%)")
+    
+                if (!$match.Success) { continue }
+    
+                $newValue = [System.Environment]::ExpandEnvironmentVariables($match.Value)
+                $filePath = ($filePath -replace $match.Value, $newValue)
+            }
+            if (
+                $filePath.StartsWith("\") -and 
+                $filePath -notlike "\\?\Volume*"
+            ) {
+                $filePath = $env:SystemDrive + $filePath
+            }
+    
+            $existence = Test-Path -LiteralPath $filePath
+            if ($existence) { 
+                $signature = Get-Signature $filePath 
+            }
+    
+            $entrie.FilePath = $filePath
+            $entrie.Signature = $signature
+            $entrie."ExecutionTime (Local)" = $executionTime.ToLocalTime()
+        }
+    
+        $csvContent | Out-GridView -Title ($pcaLog.Path + " - LogonTime: $logonTime")
+    }
+    else {
+        Write-Host ("The file " + $pcaLog.Path + " was not found...")
+    }
+}
