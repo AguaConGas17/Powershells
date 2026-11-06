@@ -1,5 +1,7 @@
 Clear-Host
 
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+
 Write-Host "Script by aguacongas17 =)`n" -ForegroundColor DarkBlue
 
 function Get-FileJournal($filePath) {
@@ -130,7 +132,7 @@ try {
     $null = Invoke-WebRequest -Uri $journalURI -UseBasicParsing -OutFile $journalPath -ErrorAction Stop
 }
 catch {
-    Write-Host "[-] Error downloading tools ($($_.targetobject.requesturi.absoluteuri))..." -ForegroundColor 
+    Write-Host "[-] Error downloading tools ($($_.targetobject.requesturi.absoluteuri))..." -ForegroundColor Red 
     exit
 }
 
