@@ -1,10 +1,14 @@
-Clear-Host
-
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 Write-Host "Script by aguacongas17 =)`n" -ForegroundColor DarkBlue
 
 function Get-FileJournal($filePath) {
+    $fullPath = [IO.Path]::GetFullPath($filePath)
+
+    if ($script:journalCache.ContainsKey($fullPath)) {
+        return $script:journalCache[$fullPath]
+    }
+
     $fileName = [System.IO.Path]::GetFileName($filePath)
     $directory = [System.IO.Path]::GetDirectoryName($filePath)
     $fileRoot = [System.IO.Path]::GetPathRoot($filePath).trim("\")
@@ -13,9 +17,16 @@ function Get-FileJournal($filePath) {
 
     $null = & $script:journalPath $fileRoot -L -n $fileName -f csv -o $output
 
-    $journal = ConvertFrom-Csv -InputObject (Get-Content -LiteralPath $output)
+    $journal = ConvertFrom-Csv -InputObject ([System.IO.File]::ReadAllText($output))
     $fileID = ($journal.Where( { $_.Name -eq $fileName -and $_.Directory -eq $directory } ))[0]."File ID"
+
+    if (!$fileID) {
+        $script:journalCache[$fullPath] = $null
+        return
+    }
+
     $fileInfo = $journal.Where({ $_."File ID" -eq $fileID })
+    $script:journalCache[$fullPath] = $fileInfo
 
     return $fileInfo
 }
@@ -24,72 +35,68 @@ function Get-JarFlags($jarPath) {
     $flagB = $false 
     $flagC = $false 
     $flags = [Collections.Generic.List[string]]::new()
-
-    $flagAKeywords = @(
-        "clicker", "fasttotem", "jesus", "timer", "nuker", "tracers", "xray", "speedmine", "airplace", 
-        "velocity", "timer", "scaffold", "noslow", "blink", "freecam", "aimbot", "selfdestruct", "ghostclient", 
-        "killaura", "crystalaura", "anchoraura", "autototem", "autoarmor", "autotrap", "autoweb", "autogap", 
-        "autojump"  , "autoclicker", "autoclick"
-    )
-    $flagCKeywords = @(
-        "com/ruffian7/sevenclicker/AutoClicker.class", "me/dewgs/clicker/Main.class", "meteordevelopment/meteorclient/MeteorClient.class"
-    )
-    $doomsdayStructure = @(
-        "mod_d.class", "net/java/f.class", "net/java/g.class", "net/java/h.class", "net/java/i.class", "net/java/k.class",
-        "net/java/l.class", "net/java/n.class", "net/java/r.class", "net/java/s.class", "net/java/t.class", "net/java/y.class"
-    )
     
     try {
         $jarContent = [System.IO.Compression.ZipFile]::OpenRead($jarPath)
-        $jarClasses = $jarContent.entries.Where({$_.Name -like "*.class"})
-        $classesPath = $jarClasses.fullname
-        $totalClasses = $jarClasses.count
-        $obfuscatedClasses = 0
+        $classes = [Collections.Generic.List[string]]::new()
+        $classPaths = [Collections.Generic.HashSet[string]]::new()
+        $ddIcon = $false
+        $obfuscated = 0
 
-        foreach ($class in $jarClasses) {
-            if (!$flagA) {
-                foreach ($cheat in $flagaKeywords) {
-                    $kw = "*$cheat*"
-
-                    if ($class.Name -like $kw) {
-                        $flagA = $true
-                        $flags.Add("Flag A")
-                        break
-                    }
-                } 
+        foreach ($entry in $jarContent.entries) {
+            if ($entry.fullname -eq "l.png") {
+                $ddIcon = $true
             }
 
-            if (!$flagB) {
-                if ($class.Name.Length -le 7) {
-                    $obfuscatedClasses++
-                }
+            if (!$entry.fullname.EndsWith(".class")) {
+                continue
+            }
 
-                if ($obfuscatedClasses -ge (0.4*$totalClasses)) {
-                    $flagB = $true
-                    $flags.Add("Flag B")
+            $classes.Add($entry)
+            $null = $classPaths.Add($entry.fullname)
+
+            if ($entry.Name.Length -le 7) {
+                $obfuscated++
+            }
+
+            if (!$flagA) {
+                foreach ($keyword in $script:flagAKeywords) {
+                    if ($entry.Name -like "*$keyword*") {
+                        $flagA = $true
+                        break
+                    }
                 }
             }
 
             if (!$flagC) {
-                foreach ($cheatClass in $flagCKeywords) {
-                    if ($classesPath.contains($cheatClass)) {
+                foreach ($keyword in $script:flagCKeywords) {
+                    if ($classPaths.contains($keyword)) {
                         $flagC = $true
                         break
                     }
                 }
-                
-                if (
-                    !(Compare-Object -ReferenceObject $doomsdayStructure -DifferenceObject $classesPath) -and
-                    $jarContent.entries.name.contains("l.png")
-                ) {
-                    $flagC = $true
-                }
+            }
+        }
 
-                if ($flagC) {
-                    $flags.Add("Flag C")
+        $totalClasses = $classes.count
+        $flagB = $obfuscated -ge (0.4 * $totalClasses)
+        if (!$flagC -and $ddIcon) {
+            if ($classPaths.count -eq $script:doomsdayStructure.count) {
+                $flagC = $true
+
+                foreach ($class in $script:doomsdayStructure) {
+                    if (!$classPaths.Contains($class)) {
+                        $flagC = $false
+                        break
+                    }
                 }
             }
         }
+
+        if ($flagA) { $flags.Add("Flag A") }
+        if ($flagB) { $flags.Add("Flag B") }
+        if ($flagC) { $flags.Add("Flag C") }
+
     }
     catch {}
     finally {
@@ -113,6 +120,22 @@ function Find-FileReplaces($filePath) {
     return $fileInfo += [pscustomobject]@{"Events" = $events}
 }
 
+$script:flagAKeywords = @(
+    "clicker", "fasttotem", "jesus", "timer", "nuker", "tracers", "xray", "speedmine", "airplace", 
+    "velocity", "timer", "scaffold", "noslow", "blink", "freecam", "aimbot", "selfdestruct", "ghostclient", 
+    "killaura", "crystalaura", "anchoraura", "autototem", "autoarmor", "autotrap", "autoweb", "autogap", 
+    "autojump"  , "autoclicker", "autoclick"
+)
+$script:flagCKeywords = @(
+    "com/ruffian7/sevenclicker/AutoClicker.class", "me/dewgs/clicker/Main.class", "meteordevelopment/meteorclient/MeteorClient.class"
+)
+$script:doomsdayStructure = @(
+    "mod_d.class", "net/java/f.class", "net/java/g.class", "net/java/h.class", "net/java/i.class", "net/java/k.class",
+    "net/java/l.class", "net/java/n.class", "net/java/r.class", "net/java/s.class", "net/java/t.class", "net/java/y.class"
+)
+
+$script:journalCache = @{}
+
 $logonTime = (Get-CimInstance Win32_LogonSession -Filter "LogonType='2'" | Sort-Object StartTime -Descending)[0].StartTime
 $prefetchPath = "$env:SystemRoot\Prefetch"
 $javaPrefetch = Get-ChildItem -LiteralPath $prefetchPath -Filter "java*.pf" | Where-Object { $_.LastWriteTime -ge $logonTime }
@@ -124,7 +147,7 @@ $xxstrURI = "https://github.com/ZaikoARG/xxstrings/releases/download/1.0.0/xxstr
 $journalURI = "https://github.com/Orbdiff/USNJournal_CLI/releases/download/v1.0.1/Journal_CLI.exe"
 $pecmdPath = "$env:TEMP\pecmd.exe"
 $xxstrPath = "$env:TEMP\xxstrings64.exe"
-$journalPath = "$env:TEMP\Journal_CLI.exe"
+$script:journalPath = "$env:TEMP\Journal_CLI.exe"
 
 try {
     $null = Invoke-WebRequest -Uri $pecmdURI -UseBasicParsing -OutFile $pecmdPath -ErrorAction Stop
