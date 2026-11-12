@@ -385,21 +385,19 @@ Write-Host "`n{ Process Memory Strings }" -ForegroundColor Blue
 foreach ($service in @("Diagtrack", "PcaSvc", "DcomLaunch")) {
     $procID = (Get-CimInstance Win32_Service -Filter "Name='$service'").ProcessID
     $rawstrings = & $xxstrPath -p $procID -raw
-    $strings = $rawstrings.Where({ $_.contains("-jar") }) | Select-Object -Unique
+    $strings = [Collections.Generic.List[string]]::new()
 
+    foreach ($str in $rawstrings) {
+        if ($str -match '"([A-Z]:\\.+java.*)" -jar "([A-Z]:\\.+)"') {
+            $strings.Add($Matches[0])
+        }
+    }
 
     if ($strings) {
-        $type = $strings.GetType().fullname
-        Write-Host "[X] Strings found in $service`:" -ForegroundColor DarkRed
+        Write-Host "[X] String(s) found in $service`:" -ForegroundColor DarkRed
 
-        if ($type -eq "System.Object[]") {
-            for ($i = 0; $i -lt $strings.count; $i++) {
-                $cString = $strings[$i]
-                Write-Host "`t$cstring"
-            }
-        }
-        else {
-            Write-Host "`t$strings" -ForegroundColor Red
+        foreach ($string in $strings) {
+            Write-Host "`t$string" -ForegroundColor Red
         }
     }
     else {
