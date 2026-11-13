@@ -18,7 +18,13 @@ function Get-FileJournal($filePath) {
     $null = & $script:journalPath $fileRoot -L -n $fileName -f csv -o $output
 
     $journal = ConvertFrom-Csv -InputObject ([System.IO.File]::ReadAllText($output))
-    $fileID = ($journal.Where( { $_.Name -eq $fileName -and $_.Directory -eq $directory } ))[0]."File ID"
+    if ($journal -is [System.Array]) {
+        $fileID = ($journal.Where( { $_.Name -eq $fileName -and $_.Directory -eq $directory } ))[0]."File ID"
+    }
+    else {
+        $script:journalCache[$fullPath] = $journal
+        return $journal
+    }
 
     if (!$fileID) {
         $script:journalCache[$fullPath] = $null
